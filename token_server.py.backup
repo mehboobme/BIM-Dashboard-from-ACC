@@ -1,0 +1,267 @@
+# """
+# Token Server for Autodesk Viewer
+# Provides access tokens for the embedded viewer
+# """
+
+# from flask import Flask, jsonify, request, send_file
+# from flask_cors import CORS
+# import requests
+# import os
+# from dotenv import load_dotenv
+# import base64
+# import time
+
+# # Load environment variables
+# load_dotenv()
+
+# app = Flask(__name__)
+# CORS(app)
+
+# # Configuration
+# CLIENT_ID = os.getenv("APS_CLIENT_ID", "").strip()
+# CLIENT_SECRET = os.getenv("APS_CLIENT_SECRET", "").strip()
+# VERSION_URN = os.getenv("VERSION_URN", "").strip()
+# BASE_URL = "https://developer.api.autodesk.com"
+
+# # Cache token
+# token_cache = {
+#     'token': None,
+#     'expires_at': 0
+# }
+
+
+# @app.route('/')
+# def index():
+#     """Serve the viewer HTML"""
+#     try:
+#         current_dir = os.path.dirname(os.path.abspath(__file__))
+#         html_file = os.path.join(current_dir, 'forge_viewer_powerbi.html')
+        
+#         if not os.path.exists(html_file):
+#             return jsonify({
+#                 'error': 'HTML file not found',
+#                 'path': html_file,
+#                 'message': 'Please create forge_viewer_powerbi.html in the same directory'
+#             }), 404
+        
+#         return send_file(html_file)
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
+
+
+# @app.route('/api/token', methods=['GET', 'POST'])
+# def get_token():
+#     """Get access token for viewer"""
+    
+#     print("\n" + "="*50)
+#     print("TOKEN REQUEST RECEIVED")
+#     print("="*50)
+    
+#     try:
+#         # Check cache first
+#         if token_cache['token'] and time.time() < token_cache['expires_at']:
+#             remaining = int(token_cache['expires_at'] - time.time())
+#             print(f"✅ Using cached token (expires in {remaining}s)")
+#             return jsonify({
+#                 'access_token': token_cache['token'],
+#                 'expires_in': remaining
+#             })
+        
+#         # Validate credentials
+#         if not CLIENT_ID:
+#             print("❌ ERROR: APS_CLIENT_ID is not set!")
+#             return jsonify({
+#                 'error': 'Missing APS_CLIENT_ID',
+#                 'message': 'Please set APS_CLIENT_ID in your .env file'
+#             }), 500
+        
+#         if not CLIENT_SECRET:
+#             print("❌ ERROR: APS_CLIENT_SECRET is not set!")
+#             return jsonify({
+#                 'error': 'Missing APS_CLIENT_SECRET',
+#                 'message': 'Please set APS_CLIENT_SECRET in your .env file'
+#             }), 500
+        
+#         # Request new token
+#         print(f"🔑 Requesting new token from Autodesk...")
+#         print(f"   Client ID: {CLIENT_ID[:10]}...")
+        
+#         url = f"{BASE_URL}/authentication/v2/token"
+#         headers = {"Content-Type": "application/x-www-form-urlencoded"}
+#         data = {
+#             "client_id": CLIENT_ID,
+#             "client_secret": CLIENT_SECRET,
+#             "grant_type": "client_credentials",
+#             "scope": "data:read viewables:read"
+#         }
+        
+#         response = requests.post(url, headers=headers, data=data, timeout=30)
+        
+#         print(f"   Response status: {response.status_code}")
+        
+#         if response.status_code != 200:
+#             print(f"❌ ERROR: {response.text}")
+#             return jsonify({
+#                 'error': 'Authentication failed',
+#                 'status': response.status_code,
+#                 'message': response.text
+#             }), 500
+        
+#         result = response.json()
+        
+#         # Cache token
+#         token_cache['token'] = result['access_token']
+#         token_cache['expires_at'] = time.time() + result.get('expires_in', 3600) - 60
+        
+#         print(f"✅ Token received successfully!")
+#         print(f"   Expires in: {result.get('expires_in')} seconds")
+#         print("="*50 + "\n")
+        
+#         return jsonify(result)
+        
+#     except requests.exceptions.Timeout:
+#         print("❌ ERROR: Request timeout")
+#         return jsonify({'error': 'Request timeout'}), 500
+        
+#     except requests.exceptions.RequestException as e:
+#         print(f"❌ ERROR: Request failed - {str(e)}")
+#         return jsonify({'error': str(e)}), 500
+        
+#     except Exception as e:
+#         print(f"❌ ERROR: Unexpected error - {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': str(e)}), 500
+
+
+# @app.route('/api/model-urn', methods=['GET'])
+# def get_model_urn():
+#     """Return the model URN"""
+    
+#     print("\n" + "="*50)
+#     print("URN REQUEST RECEIVED")
+#     print("="*50)
+    
+#     try:
+#         if not VERSION_URN:
+#             print("❌ ERROR: VERSION_URN is not set!")
+#             return jsonify({
+#                 'error': 'Missing VERSION_URN',
+#                 'message': 'Please set VERSION_URN in your .env file'
+#             }), 500
+        
+#         print(f"📦 VERSION_URN: {VERSION_URN[:60]}...")
+        
+#         # Encode URN for viewer
+#         urn_encoded = base64.urlsafe_b64encode(
+#             VERSION_URN.encode('utf-8')
+#         ).decode('utf-8').rstrip('=')
+        
+#         print(f"✅ URN encoded successfully")
+#         print("="*50 + "\n")
+        
+#         return jsonify({
+#             'urn': urn_encoded,
+#             'version_urn': VERSION_URN
+#         })
+        
+#     except Exception as e:
+#         print(f"❌ ERROR: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': str(e)}), 500
+
+
+# @app.route('/api/highlight', methods=['POST'])
+# def highlight_elements():
+#     """Endpoint for Power BI to highlight elements"""
+#     try:
+#         data = request.json or {}
+#         element_ids = data.get('elementIds', [])
+        
+#         print(f"🎯 Highlighting {len(element_ids)} elements: {element_ids}")
+        
+#         return jsonify({
+#             'success': True,
+#             'count': len(element_ids)
+#         })
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 400
+
+
+# @app.route('/health', methods=['GET'])
+# def health_check():
+#     """Health check endpoint"""
+#     return jsonify({
+#         'status': 'healthy',
+#         'config': {
+#             'client_id_set': bool(CLIENT_ID),
+#             'client_secret_set': bool(CLIENT_SECRET),
+#             'version_urn_set': bool(VERSION_URN)
+#         },
+#         'cache': {
+#             'token_cached': bool(token_cache['token']),
+#             'expires_at': token_cache['expires_at']
+#         }
+#     })
+
+
+# @app.errorhandler(404)
+# def not_found(e):
+#     return jsonify({
+#         'error': 'Not found',
+#         'path': request.path
+#     }), 404
+
+
+# @app.errorhandler(500)
+# def internal_error(e):
+#     return jsonify({
+#         'error': 'Internal server error',
+#         'message': str(e)
+#     }), 500
+
+
+# if __name__ == '__main__':
+#     print("\n" + "="*60)
+#     print("🚀 STARTING APS VIEWER TOKEN SERVER")
+#     print("="*60)
+    
+#     # Check .env file exists
+#     env_path = os.path.join(os.path.dirname(__file__), '.env')
+#     if not os.path.exists(env_path):
+#         print(f"\n⚠️  WARNING: .env file not found at {env_path}")
+#         print("   Please create a .env file with your credentials\n")
+    
+#     # Display configuration
+#     print("\n📋 CONFIGURATION CHECK:")
+#     print(f"   APS_CLIENT_ID: {'✅ Set (' + CLIENT_ID[:10] + '...)' if CLIENT_ID else '❌ NOT SET'}")
+#     print(f"   APS_CLIENT_SECRET: {'✅ Set (hidden)' if CLIENT_SECRET else '❌ NOT SET'}")
+#     print(f"   VERSION_URN: {'✅ Set (' + VERSION_URN[:40] + '...)' if VERSION_URN else '❌ NOT SET'}")
+    
+#     if not CLIENT_ID or not CLIENT_SECRET or not VERSION_URN:
+#         print("\n" + "="*60)
+#         print("⚠️  CONFIGURATION ERROR!")
+#         print("="*60)
+#         print("\nYour .env file should contain:")
+#         print("APS_CLIENT_ID=your_client_id_here")
+#         print("APS_CLIENT_SECRET=your_client_secret_here")
+#         print("VERSION_URN=urn:adsk.wipprod:dm.lineage:xxxxx")
+#         print("\n" + "="*60 + "\n")
+    
+#     print("\n🌐 SERVER ENDPOINTS:")
+#     print("   Main viewer:  http://localhost:5000")
+#     print("   Health check: http://localhost:5000/health")
+#     print("   Token API:    http://localhost:5000/api/token")
+#     print("   URN API:      http://localhost:5000/api/model-urn")
+    
+#     print("\n💡 FOR POWER BI:")
+#     print("   Use this URL in iframe or Web visual:")
+#     print("   http://localhost:5000")
+    
+#     print("\n" + "="*60)
+#     print("🔄 Starting Flask server...")
+#     print("="*60 + "\n")
+    
+#     # Run server
+#     app.run(host='0.0.0.0', port=5000, debug=True)
