@@ -14,6 +14,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dotenv import load_dotenv
 import base64
+from PIL import Image
+from io import BytesIO
 
 load_dotenv()
 
@@ -68,11 +70,11 @@ def load_cached_token():
         if os.path.exists(TOKEN_CACHE_FILE):
             with open(TOKEN_CACHE_FILE, 'r') as f:
                 data = json.load(f)
-                # Check if token is still valid (with 5 min buffer)
-                if data.get('expires_at', 0) > time.time() + 300:
-                    remaining_min = int((data['expires_at'] - time.time())/60)
+                # Check if token is still valid (with 5 second buffer)
+                if data.get('expires_at', 0) > time.time() + 5:  # Changed to 5 seconds
+                    remaining_sec = int(data['expires_at'] - time.time())
                     if not SERVER_MODE:
-                        print(f"✓ Using cached token (expires in {remaining_min} min)")
+                        print(f"✓ Using cached token (expires in {remaining_sec} sec)")
                     return data.get('access_token')
     except Exception as e:
         if not SERVER_MODE:
@@ -202,7 +204,7 @@ def get_user_name(user_id):
     return user_cache.get(user_id, user_id)
 
 def download_thumbnail_base64(snapshot_urn, three_legged_token):
-    """Download thumbnail and return as base64 data URL for embedding"""
+    """Download FULL RESOLUTION image and return as base64 data URL for embedding"""
     if not snapshot_urn or snapshot_urn == "":
         return None
     
@@ -231,16 +233,15 @@ def download_thumbnail_base64(snapshot_urn, three_legged_token):
                     download_url = signed_url_data.get('url')
                     
                     if download_url:
-                        # Download the actual image
+                        # Download the actual image at FULL RESOLUTION
                         img_response = requests.get(download_url, timeout=30)
                         
                         if img_response.status_code == 200:
-                            # Convert to base64
+                            # Convert to base64 WITHOUT resizing
                             img_base64 = base64.b64encode(img_response.content).decode('utf-8')
-                            # Return as data URL
                             return f"data:image/jpeg;base64,{img_base64}"
         else:
-            # Try Model Derivative API
+            # Try Model Derivative API - request largest size available
             encoded_urn = requests.utils.quote(snapshot_urn, safe='')
             
             url = f"https://developer.api.autodesk.com/modelderivative/v2/designdata/{encoded_urn}/thumbnail"
@@ -249,9 +250,10 @@ def download_thumbnail_base64(snapshot_urn, three_legged_token):
                 "Authorization": f"Bearer {three_legged_token}"
             }
             
+            # Request maximum size (API supports up to 400x400, but we'll request larger)
             params = {
-                "width": 600,
-                "height": 800
+                "width": 1920,   # Request large size
+                "height": 1920
             }
             
             response = requests.get(url, headers=headers, params=params, timeout=30)
@@ -448,6 +450,8 @@ def fetch_all_issues():
         else:
             raise Exception(f"API Error {response.status_code}: {response.text[:200]}")
     
+
+    
     # Transform to Power BI format
     if not SERVER_MODE:
         print(f"\nProcessing {len(all_issues)} issues with thumbnails and comments...")
@@ -484,7 +488,7 @@ def fetch_all_issues():
                 viewable_guid = viewable.get('guid', '')
                 break
         
-        # Get thumbnail as base64 data URL
+        # Get thumbnail as base64 data URL (600x600)
         snapshot_urn = issue.get('snapshotUrn')
         thumbnail_data = None
         if snapshot_urn:
@@ -556,6 +560,7 @@ def fetch_all_issues():
         print(f"✓ Processed {len(transformed)} issues\n")
     
     return transformed
+
 
 if __name__ == "__main__":
     print("="*60)
