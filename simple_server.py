@@ -373,50 +373,146 @@ def thumbnail_table():
             border-radius: 4px;
             font-size: 12px;
             color: #666;
-            font-weight: 600;
+            font-weight: 600;}
+        /* Filter status bar */
+        .filter-status-bar {
+            background: #f0f0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .filter-status-bar.active {
+            display: block;
+        }
+
+        .filter-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            font-size: 11px;
+        }
+
+        .filter-tag .remove {
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        /* Excel-style filter headers */
+    .filterable-header {
+        position: relative;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .filterable-header:hover {
+        background: linear-gradient(135deg, #5568d3 0%, #6a4a9e 100%);
+    }
+
+    .filter-icon {
+        font-size: 10px;
+        margin-left: 5px;
+        opacity: 0.7;
+    }
+
+    .filterable-header.filtered .filter-icon {
+        color: #ffd700;
+        opacity: 1;
+        font-weight: bold;
+    }
+
+    /* Filter dropdown popup */
+    .filter-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: white;
+        border: 2px solid #667eea;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        z-index: 1000;
+        min-width: 200px;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        color: #333;  /* ← Dark text */
+    }
+
+    .filter-dropdown.active {
+        display: block;
+    }
+
+    .filter-search {
+        width: calc(100% - 20px);
+        padding: 8px;
+        margin: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 12px;
+        color: #333;  /* ← Dark text */
+    }
+
+    .filter-options {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .filter-option {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #333;  /* ← Dark text */
+    }
+
+    .filter-option:hover {
+        background: #f0f0f0;
+    }
+
+    .filter-option label {
+        color: #333;  /* ← Dark text */
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .filter-option input[type="checkbox"] {
+        cursor: pointer;
+    }
+            
     </style>
 </head>
 <body>
 
     <div id="debug-log" style="display:none;">Loading...</div>
      <!-- ========== ADD FILTER CONTAINER HERE ========== -->
-    <div class="filter-container">
-        <div class="filter-group">
-            <label>Status</label>
-            <select id="filter-status">
-                <option value="">All Status</option>
-            </select>
-        </div>
-        
-        <div class="filter-group">
-            <label>Severity</label>
-            <select id="filter-severity">
-                <option value="">All Severity</option>
-            </select>
-        </div>
-        
-        <div class="filter-group">
-            <label>Assigned To</label>
-            <select id="filter-assigned">
-                <option value="">All Assigned</option>
-            </select>
-        </div>
-        
-        <button class="clear-filters-btn" onclick="clearFilters()">Clear Filters</button>
-        
-        <div class="filter-count" id="filter-count">
-            Showing <span id="visible-count">0</span> of <span id="total-count">0</span> issues
-        </div>
-    </div>
+    
     <table class="thumbnail-table">
-<thead>
+        <thead>
             <tr>
                 <th>Thumbnail</th>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Severity</th>
-                <th>Assigned To</th>
+                <th class="filterable-header" data-column="display_id">
+                    ID <span class="filter-icon">▼</span>
+                </th>
+                <th class="filterable-header" data-column="title">
+                    Title <span class="filter-icon">▼</span>
+                </th>
+                <th class="filterable-header" data-column="status">
+                    Status <span class="filter-icon">▼</span>
+                </th>
+                <th class="filterable-header" data-column="severity">
+                    Severity <span class="filter-icon">▼</span>
+                </th>
+                <th class="filterable-header" data-column="assigned_to">
+                    Assigned To <span class="filter-icon">▼</span>
+                </th>
                 <th>Comments</th>
                 <th>Comments By</th>
             </tr>
@@ -495,10 +591,8 @@ def thumbnail_table():
         ];
         
         // Load images after page loads
-        window.onload = function() {
-            logDebug('Page loaded');
-            logDebug('Loading ' + issuesData.length + ' thumbnails...');
-            
+        window.onload = function(){
+            logDebug('Page loaded');            
             issuesData.forEach((issue, idx) => {
                 const img = document.getElementById('img_' + idx);
                 if (img && issue.thumbnail) {
@@ -506,13 +600,10 @@ def thumbnail_table():
                     logDebug('Loaded img ' + idx);
                 }
             });
-            
-            // Initialize Excel-style column filters
-            initColumnFilters();  // ← CHANGED: Use initColumnFilters instead
-            
+                     
             logDebug('All loaded!');
         };
-        
+                            
         function handleRowClick(idx) {
             const issue = issuesData[idx];
             logDebug('Clicked: ' + issue.display_id);
@@ -561,58 +652,280 @@ def thumbnail_table():
             
             logDebug('Message broadcast complete');
         }
-        // Make columns resizable by dragging
-function makeColumnsResizable() {
-    const table = document.querySelector('.thumbnail-table');
-    const cols = table.querySelectorAll('th');
-    
-    cols.forEach((col, index) => {
-        const resizer = document.createElement('div');
-        resizer.style.position = 'absolute';
-        resizer.style.top = '0';
-        resizer.style.right = '0';
-        resizer.style.bottom = '0';
-        resizer.style.width = '5px';
-        resizer.style.cursor = 'col-resize';
-        resizer.style.userSelect = 'none';
-        resizer.style.zIndex = '1';
         
-        resizer.addEventListener('mouseenter', () => {
-            resizer.style.background = 'rgba(102, 126, 234, 0.5)';
-        });
-        
-        resizer.addEventListener('mouseleave', () => {
-            resizer.style.background = 'transparent';
-        });
-        
-        resizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            const startX = e.pageX;
-            const startWidth = col.offsetWidth;
-            
-            function onMouseMove(e) {
-                const newWidth = startWidth + (e.pageX - startX);
-                if (newWidth > 50) {  // Minimum width
-                    col.style.width = newWidth + 'px';
-                }
-            }
-            
-            function onMouseUp() {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            }
-            
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        });
-        
-        col.style.position = 'relative';
-        col.appendChild(resizer);
-    });
-}
+        // ========== EXCEL-STYLE FILTER FUNCTIONS ==========
+        let activeFilters = {};
+        let currentDropdown = null;
 
-// Call after table loads
-setTimeout(makeColumnsResizable, 500);
+        function initColumnFilters() {
+            const headers = document.querySelectorAll('.filterable-header');
+            
+            headers.forEach(header => {
+                header.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const column = this.dataset.column;
+                    toggleFilterDropdown(this, column);
+                });
+            });
+            
+            document.addEventListener('click', function() {
+                if (currentDropdown) {
+                    currentDropdown.remove();
+                    currentDropdown = null;
+                }
+            });
+            
+            logDebug('Excel filters initialized');
+        }
+
+        function toggleFilterDropdown(headerElement, column) {
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+            
+            const values = [...new Set(issuesData.map(item => item[column]))].filter(Boolean).sort();
+            
+            const dropdown = document.createElement('div');
+            dropdown.className = 'filter-dropdown active';
+            dropdown.onclick = (e) => e.stopPropagation();
+            
+            dropdown.innerHTML = `
+                <input type="text" class="filter-search" placeholder="Search..." onkeyup="filterDropdownOptions(this)">
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="select-all-${column}" checked onchange="toggleSelectAll('${column}')">
+                        <label for="select-all-${column}"><strong>(Select All)</strong></label>
+                    </div>
+                    ${values.map(value => `
+                        <div class="filter-option" data-value="${value}">
+                            <input type="checkbox" id="filter-${column}-${value}" value="${value}" checked>
+                            <label for="filter-${column}-${value}">${value}</label>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="filter-actions">
+                    <button class="filter-btn filter-btn-apply" onclick="applyColumnFilter('${column}')">OK</button>
+                    <button class="filter-btn filter-btn-clear" onclick="clearColumnFilter('${column}')">Clear</button>
+                </div>
+            `;
+            
+            headerElement.appendChild(dropdown);
+            currentDropdown = dropdown;
+            
+            if (activeFilters[column]) {
+                const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#select-all-' + column + ')');
+                checkboxes.forEach(cb => {
+                    cb.checked = activeFilters[column].includes(cb.value);
+                });
+                updateSelectAll(column);
+            }
+        }
+
+        function filterDropdownOptions(searchInput) {
+            const searchTerm = searchInput.value.toLowerCase();
+            const options = searchInput.parentElement.querySelectorAll('.filter-option:not(:first-child)');
+            
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+            });
+        }
+
+        function toggleSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+            });
+        }
+
+        function updateSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            selectAll.checked = checkedCount === checkboxes.length;
+        }
+
+        function applyColumnFilter(column) {
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]:checked`);
+            const selectedValues = Array.from(checkboxes).map(cb => cb.value);
+            
+            const allValues = issuesData.map(i => i[column]).filter(Boolean);
+            const uniqueValues = [...new Set(allValues)];
+            
+            if (selectedValues.length === 0 || selectedValues.length === uniqueValues.length) {
+                delete activeFilters[column];
+            } else {
+                activeFilters[column] = selectedValues;
+            }
+            
+            applyAllFilters();
+            updateFilterStatus();
+            
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function clearColumnFilter(column) {
+            delete activeFilters[column];
+            applyAllFilters();
+            updateFilterStatus();
+            
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function applyAllFilters() {
+            let visibleCount = 0;
+            
+            issuesData.forEach((issue, idx) => {
+                const row = document.querySelector(`tr[onclick*="handleRowClick(${idx})"]`);
+                if (!row) return;
+                
+                let shouldShow = true;
+                
+                for (let column in activeFilters) {
+                    if (!activeFilters[column].includes(issue[column])) {
+                        shouldShow = false;
+                        break;
+                    }
+                }
+                
+                row.style.display = shouldShow ? 'table-row' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+            
+            document.querySelectorAll('.filterable-header').forEach(header => {
+                const column = header.dataset.column;
+                if (activeFilters[column]) {
+                    header.classList.add('filtered');
+                } else {
+                    header.classList.remove('filtered');
+                }
+            });
+            
+            sendFiltersToViewer();
+            
+            logDebug('Showing ' + visibleCount + ' of ' + issuesData.length + ' issues');
+        }
+
+        function updateFilterStatus() {
+            let statusBar = document.querySelector('.filter-status-bar');
+            
+            if (!statusBar) {
+                statusBar = document.createElement('div');
+                statusBar.className = 'filter-status-bar';
+                const table = document.querySelector('.thumbnail-table');
+                table.parentElement.insertBefore(statusBar, table);
+            }
+            
+            if (Object.keys(activeFilters).length === 0) {
+                statusBar.classList.remove('active');
+                return;
+            }
+            
+            statusBar.classList.add('active');
+            statusBar.innerHTML = '<strong>Active Filters:</strong> ' + 
+                Object.entries(activeFilters).map(([column, values]) => {
+                    const label = column.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    return `<span class="filter-tag">${label}: ${values.join(', ')} <span class="remove" onclick="clearColumnFilter('${column}')">×</span></span>`;
+                }).join('');
+        }
+
+        function sendFiltersToViewer() {
+            const message = {
+                type: 'FILTER_ISSUES',
+                filters: activeFilters
+            };
+            
+            try {
+                parent.postMessage(message, '*');
+                window.top.postMessage(message, '*');
+                logDebug('Filters sent');
+            } catch(e) {
+                logDebug('Could not send filters');
+            }
+        }
+        
+        // ========== COLUMN RESIZING ==========
+        function makeColumnsResizable() {
+            const table = document.querySelector('.thumbnail-table');
+            const cols = table.querySelectorAll('th');
+            
+            cols.forEach((col, index) => {
+                const resizer = document.createElement('div');
+                resizer.style.position = 'absolute';
+                resizer.style.top = '0';
+                resizer.style.right = '0';
+                resizer.style.bottom = '0';
+                resizer.style.width = '5px';
+                resizer.style.cursor = 'col-resize';
+                resizer.style.userSelect = 'none';
+                resizer.style.zIndex = '1';
+                
+                resizer.addEventListener('mouseenter', () => {
+                    resizer.style.background = 'rgba(102, 126, 234, 0.5)';
+                });
+                
+                resizer.addEventListener('mouseleave', () => {
+                    resizer.style.background = 'transparent';
+                });
+                
+                resizer.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const startX = e.pageX;
+                    const startWidth = col.offsetWidth;
+                    
+                    function onMouseMove(e) {
+                        const newWidth = startWidth + (e.pageX - startX);
+                        if (newWidth > 50) {
+                            col.style.width = newWidth + 'px';
+                        }
+                    }
+                    
+                    function onMouseUp() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    }
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+                
+                col.style.position = 'relative';
+                col.appendChild(resizer);
+            });
+        }
+        
+        // ========== INITIALIZE ON LOAD ==========
+        window.addEventListener('load', function() {
+            logDebug('Page loaded');
+            
+            // Load thumbnails
+            issuesData.forEach((issue, idx) => {
+                const img = document.getElementById('img_' + idx);
+                if (img && issue.thumbnail) {
+                    img.src = issue.thumbnail;
+                    logDebug('Loaded img ' + idx);
+                }
+            });
+            
+            // Initialize filters
+            initColumnFilters();
+            logDebug('Filters initialized');
+            
+            // Make columns resizable
+            makeColumnsResizable();
+            
+            logDebug('All loaded!');
+        });
     </script>
 </body>
 </html>
@@ -728,6 +1041,12 @@ def powerbi_wrapper():
             display: flex;
             align-items: center;
             gap: 8px;
+            color: #333;  /* ← ADD THIS LINE */
+        }
+
+        .filter-option label {
+            color: #333;  /* ← ADD THIS BLOCK */
+            cursor: pointer;
         }
 
         .filter-option:hover {
@@ -817,16 +1136,19 @@ def powerbi_wrapper():
         window.addEventListener('message', function(event) {
             console.log('🔵 Wrapper received:', event.data);
             
-            if (event.data && event.data.type === 'NAVIGATE_TO_ISSUE') {
-                console.log('✅ Relaying to viewer...');
-                
-                const viewerFrame = document.getElementById('viewer-frame');
-                
-                // Send message to viewer
-                viewerFrame.contentWindow.postMessage(event.data, '*');
-                
-                
-            }
+        if (event.data && event.data.type === 'NAVIGATE_TO_ISSUE') {
+                        console.log('✅ Relaying to viewer...');
+                        const viewerFrame = document.getElementById('viewer-frame');
+                        viewerFrame.contentWindow.postMessage(event.data, '*');
+                        showStatus(`Navigating to ${event.data.display_id}`);
+                    }
+                    
+                    if (event.data && event.data.type === 'FILTER_ISSUES') {
+                        console.log('✅ Relaying filters to viewer...');
+                        const viewerFrame = document.getElementById('viewer-frame');
+                        viewerFrame.contentWindow.postMessage(event.data, '*');
+                        showStatus(`Filtered: ${Object.keys(event.data.filters).length} columns`);
+                    }
         });
         
         // Notify when both iframes are loaded
@@ -844,319 +1166,7 @@ def powerbi_wrapper():
             console.log('✅ Table loaded');
             if (viewerLoaded) showStatus('✅ Ready!');
         };
-        // Populate filter dropdowns with unique values
-        function initColumnFilters() {
-            const statuses = [...new Set(issuesData.map(i => i.status))].filter(Boolean).sort();
-            const severities = [...new Set(issuesData.map(i => i.severity))].filter(Boolean).sort();
-            const assigned = [...new Set(issuesData.map(i => i.assigned_to))].filter(Boolean).sort();
-            
-            const statusSelect = document.getElementById('filter-status');
-            const severitySelect = document.getElementById('filter-severity');
-            const assignedSelect = document.getElementById('filter-assigned');
-            
-            statuses.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s;
-                statusSelect.appendChild(opt);
-            });
-            
-            severities.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s;
-                severitySelect.appendChild(opt);
-            });
-            
-            assigned.forEach(a => {
-                const opt = document.createElement('option');
-                opt.value = a;
-                opt.textContent = a;
-                assignedSelect.appendChild(opt);
-            });
-            
-            // Add event listeners
-            statusSelect.addEventListener('change', applyFilters);
-            severitySelect.addEventListener('change', applyFilters);
-            assignedSelect.addEventListener('change', applyFilters);
-        }
         
-        // Apply filters to table rows
-        function applyFilters() {
-            const statusFilter = document.getElementById('filter-status').value;
-            const severityFilter = document.getElementById('filter-severity').value;
-            const assignedFilter = document.getElementById('filter-assigned').value;
-            
-            let visibleCount = 0;
-            
-            issuesData.forEach((issue, idx) => {
-                const row = document.querySelector(`tr[onclick*="handleRowClick(${idx})"]`);
-                
-                if (!row) return;
-                
-                const matchesStatus = !statusFilter || issue.status === statusFilter;
-                const matchesSeverity = !severityFilter || issue.severity === severityFilter;
-                const matchesAssigned = !assignedFilter || issue.assigned_to === assignedFilter;
-                
-                const shouldShow = matchesStatus && matchesSeverity && matchesAssigned;
-                
-                row.style.display = shouldShow ? 'table-row' : 'none';
-                
-                if (shouldShow) visibleCount++;
-            });
-            
-            // Update count
-            document.getElementById('visible-count').textContent = visibleCount;
-            document.getElementById('total-count').textContent = issuesData.length;
-            
-            // Send filter to viewer
-            sendFilterToViewer(statusFilter, severityFilter, assignedFilter);
-        }
-        
-        // Clear all filters
-        function clearFilters() {
-            document.getElementById('filter-status').value = '';
-            document.getElementById('filter-severity').value = '';
-            document.getElementById('filter-assigned').value = '';
-            applyFilters();
-        }
-        
-        // Send filter message to viewer to update pushpins
-        function sendFilterToViewer(status, severity, assigned) {
-            const message = {
-                type: 'FILTER_ISSUES',
-                filters: {
-                    status: status,
-                    severity: severity,
-                    assigned_to: assigned
-                }
-            };
-            
-            // Post to parent (wrapper)
-            try {
-                parent.postMessage(message, '*');
-                window.top.postMessage(message, '*');
-            } catch(e) {
-                console.log('Could not send filter to viewer');
-            }
-        }
-        // Excel-style column filters
-        let activeFilters = {};
-        let currentDropdown = null;
-
-        // Initialize column filters
-        function initColumnFilters() {
-            const headers = document.querySelectorAll('.filterable-header');
-            
-            headers.forEach(header => {
-                header.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const column = this.dataset.column;
-                    toggleFilterDropdown(this, column);
-                });
-            });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function() {
-                if (currentDropdown) {
-                    currentDropdown.remove();
-                    currentDropdown = null;
-                }
-            });
-        }
-
-        function toggleFilterDropdown(headerElement, column) {
-            // Close existing dropdown
-            if (currentDropdown) {
-                currentDropdown.remove();
-                currentDropdown = null;
-            }
-            
-            // Get unique values for this column
-            const values = [...new Set(issuesData.map(item => item[column]))].filter(Boolean).sort();
-            
-            // Create dropdown
-            const dropdown = document.createElement('div');
-            dropdown.className = 'filter-dropdown active';
-            dropdown.onclick = (e) => e.stopPropagation();
-            
-            // Search box
-            dropdown.innerHTML = `
-                <input type="text" class="filter-search" placeholder="Search..." onkeyup="filterDropdownOptions(this)">
-                <div class="filter-options">
-                    <div class="filter-option">
-                        <input type="checkbox" id="select-all-${column}" checked onchange="toggleSelectAll('${column}')">
-                        <label for="select-all-${column}"><strong>(Select All)</strong></label>
-                    </div>
-                    ${values.map(value => `
-                        <div class="filter-option" data-value="${value}">
-                            <input type="checkbox" id="filter-${column}-${value}" value="${value}" checked>
-                            <label for="filter-${column}-${value}">${value}</label>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="filter-actions">
-                    <button class="filter-btn filter-btn-apply" onclick="applyColumnFilter('${column}')">OK</button>
-                    <button class="filter-btn filter-btn-clear" onclick="clearColumnFilter('${column}')">Clear</button>
-                </div>
-            `;
-            
-            // Position dropdown
-            headerElement.style.position = 'relative';
-            headerElement.appendChild(dropdown);
-            currentDropdown = dropdown;
-            
-            // Pre-select based on active filters
-            if (activeFilters[column]) {
-                const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#select-all-' + column + ')');
-                checkboxes.forEach(cb => {
-                    cb.checked = activeFilters[column].includes(cb.value);
-                });
-                updateSelectAll(column);
-            }
-        }
-
-        function filterDropdownOptions(searchInput) {
-            const searchTerm = searchInput.value.toLowerCase();
-            const options = searchInput.parentElement.querySelectorAll('.filter-option:not(:first-child)');
-            
-            options.forEach(option => {
-                const text = option.textContent.toLowerCase();
-                option.style.display = text.includes(searchTerm) ? 'flex' : 'none';
-            });
-        }
-
-        function toggleSelectAll(column) {
-            const selectAll = document.getElementById('select-all-' + column);
-            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
-            
-            checkboxes.forEach(cb => {
-                cb.checked = selectAll.checked;
-            });
-        }
-
-        function updateSelectAll(column) {
-            const selectAll = document.getElementById('select-all-' + column);
-            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
-            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            
-            selectAll.checked = checkedCount === checkboxes.length;
-        }
-
-        function applyColumnFilter(column) {
-            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]:checked`);
-            const selectedValues = Array.from(checkboxes).map(cb => cb.value);
-            
-            if (selectedValues.length === 0 || selectedValues.length === issuesData.filter(i => i[column]).length) {
-                delete activeFilters[column];
-            } else {
-                activeFilters[column] = selectedValues;
-            }
-            
-            applyAllFilters();
-            updateFilterStatus();
-            
-            // Close dropdown
-            if (currentDropdown) {
-                currentDropdown.remove();
-                currentDropdown = null;
-            }
-        }
-
-        function clearColumnFilter(column) {
-            delete activeFilters[column];
-            applyAllFilters();
-            updateFilterStatus();
-            
-            // Close dropdown
-            if (currentDropdown) {
-                currentDropdown.remove();
-                currentDropdown = null;
-            }
-        }
-
-        function applyAllFilters() {
-            let visibleCount = 0;
-            
-            issuesData.forEach((issue, idx) => {
-                const row = document.querySelector(`tr[onclick*="handleRowClick(${idx})"]`);
-                if (!row) return;
-                
-                let shouldShow = true;
-                
-                // Check all active filters
-                for (let column in activeFilters) {
-                    if (!activeFilters[column].includes(issue[column])) {
-                        shouldShow = false;
-                        break;
-                    }
-                }
-                
-                row.style.display = shouldShow ? 'table-row' : 'none';
-                if (shouldShow) visibleCount++;
-            });
-            
-            // Update filtered column headers
-            document.querySelectorAll('.filterable-header').forEach(header => {
-                const column = header.dataset.column;
-                if (activeFilters[column]) {
-                    header.classList.add('filtered');
-                } else {
-                    header.classList.remove('filtered');
-                }
-            });
-            
-            // Send to viewer
-            sendFiltersToViewer();
-            
-            console.log('Showing', visibleCount, 'of', issuesData.length, 'issues');
-        }
-
-        function updateFilterStatus() {
-            let statusBar = document.querySelector('.filter-status-bar');
-            
-            if (!statusBar) {
-                statusBar = document.createElement('div');
-                statusBar.className = 'filter-status-bar';
-                document.querySelector('.thumbnail-table').parentElement.insertBefore(
-                    statusBar,
-                    document.querySelector('.thumbnail-table')
-                );
-            }
-            
-            if (Object.keys(activeFilters).length === 0) {
-                statusBar.classList.remove('active');
-                return;
-            }
-            
-            statusBar.classList.add('active');
-            statusBar.innerHTML = '<strong>Active Filters:</strong> ' + 
-                Object.entries(activeFilters).map(([column, values]) => {
-                    const label = column.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    return `<span class="filter-tag">${label}: ${values.join(', ')} <span class="remove" onclick="clearColumnFilter('${column}')">×</span></span>`;
-                }).join('');
-        }
-
-        function sendFiltersToViewer() {
-            const message = {
-                type: 'FILTER_ISSUES',
-                filters: activeFilters
-            };
-            
-            try {
-                parent.postMessage(message, '*');
-                window.top.postMessage(message, '*');
-            } catch(e) {
-                console.log('Could not send filter to viewer');
-            }
-        }
-
-        // Initialize on load
-        window.addEventListener('load', function() {
-            // ... existing onload code ...
-            
-            initColumnFilters();
-        });
     </script>
 </body>
 </html>
