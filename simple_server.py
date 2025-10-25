@@ -302,11 +302,112 @@ def thumbnail_table():
             overflow-y: auto;
             z-index: 10000;
         }
+         /* ========== ADD THESE FILTER STYLES ========== */
+        .filter-container {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .filter-group label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .filter-group select {
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+            cursor: pointer;
+            min-width: 150px;
+            transition: border-color 0.2s;
+        }
+        
+        .filter-group select:hover {
+            border-color: #667eea;
+        }
+        
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .clear-filters-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: background 0.2s;
+            margin-top: 18px;
+        }
+        
+        .clear-filters-btn:hover {
+            background: #5568d3;
+        }
+        
+        .filter-count {
+            margin-top: 18px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
     </style>
 </head>
 <body>
+
     <div id="debug-log" style="display:none;">Loading...</div>
-    
+     <!-- ========== ADD FILTER CONTAINER HERE ========== -->
+    <div class="filter-container">
+        <div class="filter-group">
+            <label>Status</label>
+            <select id="filter-status">
+                <option value="">All Status</option>
+            </select>
+        </div>
+        
+        <div class="filter-group">
+            <label>Severity</label>
+            <select id="filter-severity">
+                <option value="">All Severity</option>
+            </select>
+        </div>
+        
+        <div class="filter-group">
+            <label>Assigned To</label>
+            <select id="filter-assigned">
+                <option value="">All Assigned</option>
+            </select>
+        </div>
+        
+        <button class="clear-filters-btn" onclick="clearFilters()">Clear Filters</button>
+        
+        <div class="filter-count" id="filter-count">
+            Showing <span id="visible-count">0</span> of <span id="total-count">0</span> issues
+        </div>
+    </div>
     <table class="thumbnail-table">
         <thead>
             <tr>
@@ -396,6 +497,7 @@ def thumbnail_table():
             logDebug('Page loaded');
             logDebug('Loading ' + issuesData.length + ' thumbnails...');
             
+            // Load thumbnails
             issuesData.forEach((issue, idx) => {
                 const img = document.getElementById('img_' + idx);
                 if (img && issue.thumbnail) {
@@ -404,7 +506,14 @@ def thumbnail_table():
                 }
             });
             
-            logDebug('All images loaded!');
+            // Populate filter dropdowns
+            populateFilters();
+            
+            // Show initial count
+            document.getElementById('visible-count').textContent = issuesData.length;
+            document.getElementById('total-count').textContent = issuesData.length;
+            
+            logDebug('All loaded!');
         };
         
         function handleRowClick(idx) {
@@ -615,6 +724,102 @@ def powerbi_wrapper():
             console.log('✅ Table loaded');
             if (viewerLoaded) showStatus('✅ Ready!');
         };
+        // Populate filter dropdowns with unique values
+        function populateFilters() {
+            const statuses = [...new Set(issuesData.map(i => i.status))].filter(Boolean).sort();
+            const severities = [...new Set(issuesData.map(i => i.severity))].filter(Boolean).sort();
+            const assigned = [...new Set(issuesData.map(i => i.assigned_to))].filter(Boolean).sort();
+            
+            const statusSelect = document.getElementById('filter-status');
+            const severitySelect = document.getElementById('filter-severity');
+            const assignedSelect = document.getElementById('filter-assigned');
+            
+            statuses.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                statusSelect.appendChild(opt);
+            });
+            
+            severities.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                severitySelect.appendChild(opt);
+            });
+            
+            assigned.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a;
+                opt.textContent = a;
+                assignedSelect.appendChild(opt);
+            });
+            
+            // Add event listeners
+            statusSelect.addEventListener('change', applyFilters);
+            severitySelect.addEventListener('change', applyFilters);
+            assignedSelect.addEventListener('change', applyFilters);
+        }
+        
+        // Apply filters to table rows
+        function applyFilters() {
+            const statusFilter = document.getElementById('filter-status').value;
+            const severityFilter = document.getElementById('filter-severity').value;
+            const assignedFilter = document.getElementById('filter-assigned').value;
+            
+            let visibleCount = 0;
+            
+            issuesData.forEach((issue, idx) => {
+                const row = document.querySelector(`tr[onclick*="handleRowClick(${idx})"]`);
+                
+                if (!row) return;
+                
+                const matchesStatus = !statusFilter || issue.status === statusFilter;
+                const matchesSeverity = !severityFilter || issue.severity === severityFilter;
+                const matchesAssigned = !assignedFilter || issue.assigned_to === assignedFilter;
+                
+                const shouldShow = matchesStatus && matchesSeverity && matchesAssigned;
+                
+                row.style.display = shouldShow ? 'table-row' : 'none';
+                
+                if (shouldShow) visibleCount++;
+            });
+            
+            // Update count
+            document.getElementById('visible-count').textContent = visibleCount;
+            document.getElementById('total-count').textContent = issuesData.length;
+            
+            // Send filter to viewer
+            sendFilterToViewer(statusFilter, severityFilter, assignedFilter);
+        }
+        
+        // Clear all filters
+        function clearFilters() {
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-severity').value = '';
+            document.getElementById('filter-assigned').value = '';
+            applyFilters();
+        }
+        
+        // Send filter message to viewer to update pushpins
+        function sendFilterToViewer(status, severity, assigned) {
+            const message = {
+                type: 'FILTER_ISSUES',
+                filters: {
+                    status: status,
+                    severity: severity,
+                    assigned_to: assigned
+                }
+            };
+            
+            // Post to parent (wrapper)
+            try {
+                parent.postMessage(message, '*');
+                window.top.postMessage(message, '*');
+            } catch(e) {
+                console.log('Could not send filter to viewer');
+            }
+        }
     </script>
 </body>
 </html>
