@@ -409,15 +409,16 @@ def thumbnail_table():
         </div>
     </div>
     <table class="thumbnail-table">
-        <thead>
+<thead>
             <tr>
                 <th>Thumbnail</th>
                 <th>ID</th>
                 <th>Title</th>
                 <th>Status</th>
                 <th>Severity</th>
+                <th>Assigned To</th>
                 <th>Comments</th>
-                <th>Comments By</th>  
+                <th>Comments By</th>
             </tr>
         </thead>
         <tbody>
@@ -430,14 +431,14 @@ def thumbnail_table():
             title = issue.get('title', 'Untitled')
             status = issue.get('status', 'Unknown')
             severity = issue.get('severity', 'N/A')
-            comments_by = issue.get('comment_1_by', '')
+            assigned_to = issue.get('assigned_to', 'Unassigned')
             comments = issue.get('comment_1', '')
+            comments_by = issue.get('comment_1_by', '')
             
             status_class = 'status-open'
             if 'closed' in status.lower():
                 status_class = 'status-closed'
             
-            # Create unique ID for this image
             img_id = f"img_{idx}"
             
             html += f"""
@@ -449,7 +450,8 @@ def thumbnail_table():
             <td>{title}</td>
             <td><span class="status-badge {status_class}">{status}</span></td>
             <td>{severity}</td>
-            <td>{comments}</td>
+            <td>{assigned_to}</td>
+            <td>{comments[:50] if comments else 'No comments'}</td>
             <td>{comments_by}</td>
         </tr>
 """
@@ -497,7 +499,6 @@ def thumbnail_table():
             logDebug('Page loaded');
             logDebug('Loading ' + issuesData.length + ' thumbnails...');
             
-            // Load thumbnails
             issuesData.forEach((issue, idx) => {
                 const img = document.getElementById('img_' + idx);
                 if (img && issue.thumbnail) {
@@ -506,12 +507,8 @@ def thumbnail_table():
                 }
             });
             
-            // Populate filter dropdowns
-            populateFilters();
-            
-            // Show initial count
-            document.getElementById('visible-count').textContent = issuesData.length;
-            document.getElementById('total-count').textContent = issuesData.length;
+            // Initialize Excel-style column filters
+            initColumnFilters();  // ← CHANGED: Use initColumnFilters instead
             
             logDebug('All loaded!');
         };
@@ -673,6 +670,129 @@ def powerbi_wrapper():
             z-index: 100000;
             display: none;
         }
+        /* Filter header styles */
+        .filterable-header {
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filterable-header:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a4a9e 100%);
+        }
+
+        .filter-icon {
+            font-size: 10px;
+            margin-left: 5px;
+            opacity: 0.7;
+        }
+
+        .filterable-header.filtered .filter-icon {
+            color: #ffd700;
+            opacity: 1;
+        }
+
+        /* Filter dropdown */
+        .filter-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .filter-dropdown.active {
+            display: block;
+        }
+
+        .filter-search {
+            width: calc(100% - 20px);
+            padding: 8px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .filter-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-option:hover {
+            background: #f0f0f0;
+        }
+
+        .filter-option input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .filter-actions {
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+        }
+
+        .filter-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .filter-btn-apply {
+            background: #667eea;
+            color: white;
+        }
+
+        .filter-btn-clear {
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .filter-status-bar {
+            background: #f0f0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .filter-status-bar.active {
+            display: block;
+        }
+
+        .filter-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            font-size: 11px;
+        }
+
+        .filter-tag .remove {
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -725,7 +845,7 @@ def powerbi_wrapper():
             if (viewerLoaded) showStatus('✅ Ready!');
         };
         // Populate filter dropdowns with unique values
-        function populateFilters() {
+        function initColumnFilters() {
             const statuses = [...new Set(issuesData.map(i => i.status))].filter(Boolean).sort();
             const severities = [...new Set(issuesData.map(i => i.severity))].filter(Boolean).sort();
             const assigned = [...new Set(issuesData.map(i => i.assigned_to))].filter(Boolean).sort();
@@ -820,6 +940,223 @@ def powerbi_wrapper():
                 console.log('Could not send filter to viewer');
             }
         }
+        // Excel-style column filters
+        let activeFilters = {};
+        let currentDropdown = null;
+
+        // Initialize column filters
+        function initColumnFilters() {
+            const headers = document.querySelectorAll('.filterable-header');
+            
+            headers.forEach(header => {
+                header.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const column = this.dataset.column;
+                    toggleFilterDropdown(this, column);
+                });
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function() {
+                if (currentDropdown) {
+                    currentDropdown.remove();
+                    currentDropdown = null;
+                }
+            });
+        }
+
+        function toggleFilterDropdown(headerElement, column) {
+            // Close existing dropdown
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+            
+            // Get unique values for this column
+            const values = [...new Set(issuesData.map(item => item[column]))].filter(Boolean).sort();
+            
+            // Create dropdown
+            const dropdown = document.createElement('div');
+            dropdown.className = 'filter-dropdown active';
+            dropdown.onclick = (e) => e.stopPropagation();
+            
+            // Search box
+            dropdown.innerHTML = `
+                <input type="text" class="filter-search" placeholder="Search..." onkeyup="filterDropdownOptions(this)">
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="select-all-${column}" checked onchange="toggleSelectAll('${column}')">
+                        <label for="select-all-${column}"><strong>(Select All)</strong></label>
+                    </div>
+                    ${values.map(value => `
+                        <div class="filter-option" data-value="${value}">
+                            <input type="checkbox" id="filter-${column}-${value}" value="${value}" checked>
+                            <label for="filter-${column}-${value}">${value}</label>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="filter-actions">
+                    <button class="filter-btn filter-btn-apply" onclick="applyColumnFilter('${column}')">OK</button>
+                    <button class="filter-btn filter-btn-clear" onclick="clearColumnFilter('${column}')">Clear</button>
+                </div>
+            `;
+            
+            // Position dropdown
+            headerElement.style.position = 'relative';
+            headerElement.appendChild(dropdown);
+            currentDropdown = dropdown;
+            
+            // Pre-select based on active filters
+            if (activeFilters[column]) {
+                const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#select-all-' + column + ')');
+                checkboxes.forEach(cb => {
+                    cb.checked = activeFilters[column].includes(cb.value);
+                });
+                updateSelectAll(column);
+            }
+        }
+
+        function filterDropdownOptions(searchInput) {
+            const searchTerm = searchInput.value.toLowerCase();
+            const options = searchInput.parentElement.querySelectorAll('.filter-option:not(:first-child)');
+            
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+            });
+        }
+
+        function toggleSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+            });
+        }
+
+        function updateSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            selectAll.checked = checkedCount === checkboxes.length;
+        }
+
+        function applyColumnFilter(column) {
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]:checked`);
+            const selectedValues = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (selectedValues.length === 0 || selectedValues.length === issuesData.filter(i => i[column]).length) {
+                delete activeFilters[column];
+            } else {
+                activeFilters[column] = selectedValues;
+            }
+            
+            applyAllFilters();
+            updateFilterStatus();
+            
+            // Close dropdown
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function clearColumnFilter(column) {
+            delete activeFilters[column];
+            applyAllFilters();
+            updateFilterStatus();
+            
+            // Close dropdown
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function applyAllFilters() {
+            let visibleCount = 0;
+            
+            issuesData.forEach((issue, idx) => {
+                const row = document.querySelector(`tr[onclick*="handleRowClick(${idx})"]`);
+                if (!row) return;
+                
+                let shouldShow = true;
+                
+                // Check all active filters
+                for (let column in activeFilters) {
+                    if (!activeFilters[column].includes(issue[column])) {
+                        shouldShow = false;
+                        break;
+                    }
+                }
+                
+                row.style.display = shouldShow ? 'table-row' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+            
+            // Update filtered column headers
+            document.querySelectorAll('.filterable-header').forEach(header => {
+                const column = header.dataset.column;
+                if (activeFilters[column]) {
+                    header.classList.add('filtered');
+                } else {
+                    header.classList.remove('filtered');
+                }
+            });
+            
+            // Send to viewer
+            sendFiltersToViewer();
+            
+            console.log('Showing', visibleCount, 'of', issuesData.length, 'issues');
+        }
+
+        function updateFilterStatus() {
+            let statusBar = document.querySelector('.filter-status-bar');
+            
+            if (!statusBar) {
+                statusBar = document.createElement('div');
+                statusBar.className = 'filter-status-bar';
+                document.querySelector('.thumbnail-table').parentElement.insertBefore(
+                    statusBar,
+                    document.querySelector('.thumbnail-table')
+                );
+            }
+            
+            if (Object.keys(activeFilters).length === 0) {
+                statusBar.classList.remove('active');
+                return;
+            }
+            
+            statusBar.classList.add('active');
+            statusBar.innerHTML = '<strong>Active Filters:</strong> ' + 
+                Object.entries(activeFilters).map(([column, values]) => {
+                    const label = column.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    return `<span class="filter-tag">${label}: ${values.join(', ')} <span class="remove" onclick="clearColumnFilter('${column}')">×</span></span>`;
+                }).join('');
+        }
+
+        function sendFiltersToViewer() {
+            const message = {
+                type: 'FILTER_ISSUES',
+                filters: activeFilters
+            };
+            
+            try {
+                parent.postMessage(message, '*');
+                window.top.postMessage(message, '*');
+            } catch(e) {
+                console.log('Could not send filter to viewer');
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('load', function() {
+            // ... existing onload code ...
+            
+            initColumnFilters();
+        });
     </script>
 </body>
 </html>
