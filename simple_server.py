@@ -238,12 +238,18 @@ def thumbnail_table():
         .thumbnail-table thead {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         .thumbnail-table th {
-            padding: 10px;
-            text-align: left;
+            padding: 3px 3px;
+            text-align: center;
             font-size: 12px;
             font-weight: 600;
+            top: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 100;
         }
         .thumbnail-table td {
             padding: 10px;
@@ -309,6 +315,8 @@ def thumbnail_table():
                 <th>Title</th>
                 <th>Status</th>
                 <th>Severity</th>
+                <th>Comments</th>
+                <th>Comments By</th>  
             </tr>
         </thead>
         <tbody>
@@ -321,6 +329,8 @@ def thumbnail_table():
             title = issue.get('title', 'Untitled')
             status = issue.get('status', 'Unknown')
             severity = issue.get('severity', 'N/A')
+            comments_by = issue.get('comment_1_by', '')
+            comments = issue.get('comment_1', '')
             
             status_class = 'status-open'
             if 'closed' in status.lower():
@@ -338,6 +348,8 @@ def thumbnail_table():
             <td>{title}</td>
             <td><span class="status-badge {status_class}">{status}</span></td>
             <td>{severity}</td>
+            <td>{comments}</td>
+            <td>{comments_by}</td>
         </tr>
 """
         
@@ -443,6 +455,58 @@ def thumbnail_table():
             
             logDebug('Message broadcast complete');
         }
+        // Make columns resizable by dragging
+function makeColumnsResizable() {
+    const table = document.querySelector('.thumbnail-table');
+    const cols = table.querySelectorAll('th');
+    
+    cols.forEach((col, index) => {
+        const resizer = document.createElement('div');
+        resizer.style.position = 'absolute';
+        resizer.style.top = '0';
+        resizer.style.right = '0';
+        resizer.style.bottom = '0';
+        resizer.style.width = '5px';
+        resizer.style.cursor = 'col-resize';
+        resizer.style.userSelect = 'none';
+        resizer.style.zIndex = '1';
+        
+        resizer.addEventListener('mouseenter', () => {
+            resizer.style.background = 'rgba(102, 126, 234, 0.5)';
+        });
+        
+        resizer.addEventListener('mouseleave', () => {
+            resizer.style.background = 'transparent';
+        });
+        
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const startX = e.pageX;
+            const startWidth = col.offsetWidth;
+            
+            function onMouseMove(e) {
+                const newWidth = startWidth + (e.pageX - startX);
+                if (newWidth > 50) {  // Minimum width
+                    col.style.width = newWidth + 'px';
+                }
+            }
+            
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+        
+        col.style.position = 'relative';
+        col.appendChild(resizer);
+    });
+}
+
+// Call after table loads
+setTimeout(makeColumnsResizable, 500);
     </script>
 </body>
 </html>
@@ -477,7 +541,7 @@ def powerbi_wrapper():
             height: 100vh;
         }
         #viewer-frame {
-            flex: 2;
+            flex: 1;
             border: none;
             width: 100%;
         }
@@ -532,7 +596,7 @@ def powerbi_wrapper():
                 // Send message to viewer
                 viewerFrame.contentWindow.postMessage(event.data, '*');
                 
-                showStatus('🎯 Zooming to Issue ' + event.data.display_id);
+                
             }
         });
         
