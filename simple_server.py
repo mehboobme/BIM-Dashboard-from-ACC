@@ -39,6 +39,9 @@ issues_cache = {
 CACHE_DURATION = 300
 # =========================================================
 
+# Model URN mapping cache
+MODEL_URN_CACHE = {}
+
 # Import issues fetcher
 FETCHER_AVAILABLE = False
 fetch_all_issues = None
@@ -82,6 +85,39 @@ def get_access_token():
     
     return None
 
+def build_model_urn_mapping():
+    """Build mapping from viewable_guid to model URN"""
+    global MODEL_URN_CACHE
+    
+    if not issues_cache['data']:
+        return {}
+    
+    # Get unique viewables from issues
+    unique_viewables = {}
+    for issue in issues_cache['data']:
+        vg = issue.get('viewable_guid')
+        vn = issue.get('viewable_name', 'Model')
+        if vg and vg not in unique_viewables:
+            unique_viewables[vg] = vn
+    
+    print(f"\n📊 Found {len(unique_viewables)} unique models:")
+    for vg, vn in unique_viewables.items():
+        print(f"   - {vn}")
+    
+    # Get URNs from environment variables
+    hofuf_urn = os.getenv("HOFUF_URN", "").strip()
+    snowdon_urn = os.getenv("SNOWDON_STR_URN", "").strip()
+    
+    if hofuf_urn and snowdon_urn:
+        print("✅ Using URNs from .env file")
+        MODEL_URN_CACHE = {
+            'd039209d-a250-1473-1dd9-a3953b7c2e9b': hofuf_urn,
+            '5fbd4c90-ff9e-87ff-78ff-b3654b67f6e4': snowdon_urn
+        }
+    else:
+        print("⚠️ Add HOFUF_URN and SNOWDON_STR_URN to .env file")
+    
+    return MODEL_URN_CACHE
 
 @app.route('/')
 def index():
@@ -200,6 +236,58 @@ def api_stats():
             'high': len([i for i in issues if i.get('severity', '').lower() == 'high']),
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/model-urn-for-viewable')
+def get_model_urn_for_viewable():
+    """Get the model URN for a specific viewable_guid"""
+    try:
+        viewable_guid = request.args.get('viewable_guid')
+        
+        if not viewable_guid:
+            return jsonify({'error': 'viewable_guid required'}), 400
+        
+        # Build mapping if not done
+        if not MODEL_URN_CACHE:
+            build_model_urn_mapping()
+        
+        # Get the URN
+        model_urn = MODEL_URN_CACHE.get(viewable_guid)
+        
+        if not model_urn:
+            print(f"   ❌ No URN found for viewable: {viewable_guid}")
+            return jsonify({'error': 'URN not found for this viewable'}), 404
+        
+        # Get viewable name
+        viewable_name = 'Model'
+        if issues_cache['data']:
+            for issue in issues_cache['data']:
+                if issue.get('viewable_guid') == viewable_guid:
+                    viewable_name = issue.get('viewable_name', 'Model')
+                    if viewable_name == '{3D}':
+                        viewable_name = 'Snowdon Structure'
+                    if '.' in viewable_name:
+                        viewable_name = viewable_name.rsplit('.', 1)[0]
+                    break
+        
+        # Encode URN
+        urn_encoded = base64.urlsafe_b64encode(
+            model_urn.encode('utf-8')
+        ).decode('utf-8').rstrip('=')
+        
+        print(f"   ✅ Returning URN for {viewable_name}")
+        
+        return jsonify({
+            'urn': urn_encoded,
+            'viewable_guid': viewable_guid,
+            'viewable_name': viewable_name,
+            'model_name': viewable_name
+        })
+        
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/thumbnail-table.html')
@@ -575,14 +663,25 @@ def thumbnail_table():
             title = issue.get('title', '').replace("'", "\\'")
             thumbnail = issue.get('thumbnail_base64', '')
             
+        # Get viewable info
+            viewable_name = issue.get('viewable_name', 'Model')
+            viewable_guid = issue.get('viewable_guid', '')
+            if '.' in viewable_name:
+                viewable_name = viewable_name.rsplit('.', 1)[0]
+            
             html += f"""
             {{
                 issue_id: '{issue_id}',
                 display_id: '{issue.get('display_id', '')}',
                 title: '{title}',
+                status: '{issue.get('status', '')}',
+                severity: '{issue.get('severity', '')}',
+                assigned_to: '{issue.get('assigned_to', '')}',
                 pin_x: {issue.get('pin_x', 0)},
                 pin_y: {issue.get('pin_y', 0)},
                 pin_z: {issue.get('pin_z', 0)},
+                viewable_name: '{viewable_name}',
+                viewable_guid: '{viewable_guid}',
                 thumbnail: `{thumbnail}`
             }},
 """
@@ -611,24 +710,33 @@ def thumbnail_table():
         }
         
         function sendMessageToViewer(issue) {
+            console.log('🔵 CLICK DETECTED:', issue.display_id);
+            console.log('   Viewable GUID:', issue.viewable_guid);
+            console.log('   Viewable Name:', issue.viewable_name);
             logDebug('Sending message...');
             
             const message = {
-                type: 'NAVIGATE_TO_ISSUE',
+                type: 'LOAD_MODEL_AND_NAVIGATE',
                 issue_id: issue.issue_id,
                 display_id: issue.display_id,
                 pin_x: issue.pin_x,
                 pin_y: issue.pin_y,
                 pin_z: issue.pin_z,
                 title: issue.title,
+                viewable_name: issue.viewable_name,
+                viewable_guid: issue.viewable_guid,
                 timestamp: Date.now()
             };
+            
+            console.log('📤 Sending message:', message);
             
             // Method 1: Post to parent
             try {
                 parent.postMessage(message, '*');
+                console.log('✅ Sent to parent');
                 logDebug('Sent to parent');
             } catch(e) {
+                console.error('❌ Parent failed:', e);
                 logDebug('Parent failed: ' + e.message);
             }
             
@@ -1226,8 +1334,23 @@ if __name__ == '__main__':
     print("\n📋 Status:")
     print(f"   CLIENT_ID: {'✅' if CLIENT_ID else '❌'}")
     print(f"   CLIENT_SECRET: {'✅' if CLIENT_SECRET else '❌'}")
-    print(f"   VERSION_URN: {'✅' if VERSION_URN else '❌'}")
+    print(f"   HOFUF_URN: {'✅' if os.getenv('HOFUF_URN') else '❌'}")
+    print(f"   SNOWDON_URN: {'✅' if os.getenv('SNOWDON_STR_URN') else '❌'}")
     print(f"   Issues Fetcher: {'✅' if FETCHER_AVAILABLE else '❌'}")
+    
+    # Pre-load issues and build URN mapping
+    if FETCHER_AVAILABLE and fetch_all_issues:
+        try:
+            print("\n📥 Pre-loading issues...")
+            issues_cache['data'] = fetch_all_issues()
+            issues_cache['timestamp'] = time.time()
+            print(f"   ✅ Loaded {len(issues_cache['data'])} issues")
+            
+            # Build URN mapping
+            build_model_urn_mapping()
+            
+        except Exception as e:
+            print(f"   ⚠️ Could not preload: {e}")
     
     print("\n🌐 Endpoints:")
     print("   📊 http://localhost:5000/api/issues  ← FOR POWER BI")
