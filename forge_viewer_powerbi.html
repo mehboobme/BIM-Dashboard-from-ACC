@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>APS 3D Viewer</title>
+  <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css">
+  <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; overflow: hidden; }
+
+    #viewer {
+      width: 100%;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* ========== MAKE AUTODESK INBUILT ICONS SMALLER ========== */
+  /* Button container - 30% size */
+.adsk-viewing-viewer .adsk-button,
+.adsk-control-group .adsk-button {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  margin: 1px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: visible !important;  /* Changed from hidden to visible for scaled icons */
+  line-height: 20px !important;
+}
+
+/* Icons - 70% scale (comprehensive targeting) */
+.adsk-viewing-viewer .adsk-button .adsk-icon,
+.adsk-viewing-viewer .adsk-button svg,
+.adsk-viewing-viewer .adsk-button img,
+.adsk-control-group .adsk-button .adsk-icon,
+.adsk-control-group .adsk-button svg,
+.adsk-control-group .adsk-button img {
+  transform: scale(0.1) !important;
+  transform-origin: center center !important;
+  flex-shrink: 0 !important;
+}
+
+/* Ensure SVG paths and children also scale */
+.adsk-viewing-viewer .adsk-button .adsk-icon *,
+.adsk-viewing-viewer .adsk-button svg *,
+.adsk-control-group .adsk-button .adsk-icon *,
+.adsk-control-group .adsk-button svg * {
+  transform: scale(1) !important;  /* Reset to prevent double-scaling */
+}
+
+/* Toolbar height */
+.adsk-viewing-viewer .adsk-toolbar,
+.adsk-toolbar-group,
+.adsk-control-group {
+  height: auto !important;
+  padding: 1px !important;
+}
+
+/* Toolbar alignment */
+.adsk-viewing-viewer .adsk-toolbar-group {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* ViewCube - 30% size */
+.adsk-viewing-viewer .homeViewWrapper {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.adsk-viewing-viewer .homeViewWrapper canvas {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+    /* ========================================================= */
+
+    /* ======= DROPDOWN MENU - ADJUSTED SIZE ======= */
+    .dropdown {
+      position: absolute;
+      top: 25px;
+      right: 10px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dropdown-button {
+      width: 25px;        /* Changed from 1.5cm */
+      height: 25px;       /* Changed from 1.5cm */
+      border: none;
+      border-radius: 50px; /* Changed from 50% for rounded square */
+      background: #3498db;
+      color: white;
+      font-size: 12px;    /* Adjusted size */
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      transition: background 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dropdown-button:hover {
+      background: #2980b9;
+    }
+
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      top: 25px;          /* Adjusted for new button size */
+      right: 0;
+      background-color: rgba(255,255,255,0.97);
+      min-width: 50px;   /* Made slightly wider */
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 10px;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .dropdown-content button {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 5px 5px; /* Slightly more padding */
+      cursor: pointer;
+      text-align: left;
+      font-size: 10px;    /* Slightly larger */
+      color: #333;
+      transition: background 0.2s;
+    }
+
+    .dropdown-content button:hover {
+      background: #f1f1f1;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: white;
+      background: #3498db;
+      font-size: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    #model-name {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      padding: 10px 20px;
+      border-radius: 8px;
+      color: white;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-size: 16px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+
+    #info {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      z-index: 100;
+      background: rgba(255,255,255,0.95);
+      border-radius: 8px;
+      padding: 5px;
+      width: 150px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      font-size: 10px;
+    }
+
+    .error { background: #e74c3c !important; }
+    .success { background: #2ecc71 !important; }
+
+    /* ========== PUSHPIN STYLES ========== */
+    .custom-pushpin {
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      background: #e74c3c;
+      border: 0px solid white;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+      transition: all 0.2s;
+      z-index: 50;
+    }
+
+    .custom-pushpin:hover {
+      transform: scale(1.3);
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+
+    .custom-pushpin.selected {
+      background: #2ecc71;
+      transform: scale(1.4);
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+<body>
+  <div id="viewer"></div>
+  <div id="status">Initializing...</div>
+  <div id="model-name">Loading model...</div>
+
+  <!-- Dropdown Menu -->
+  <div class="dropdown">
+    <button class="dropdown-button">☰</button>
+    <div class="dropdown-content" id="dropdownMenu">
+      <button onclick="resetView()">🔄 Reset View</button>
+      <button onclick="fitToView()">📐 Fit to View</button>
+      <button onclick="showAll()">👁️ Show All</button>
+      <button onclick="togglePushpins()">📍 Toggle Pushpins</button>
+      <button onclick="toggleInfo()">ℹ️ Info Panel</button>
+    </div>
+  </div>
+
+  <div id="info"></div>
+
+  <script>
+    let viewer = null;
+    let currentModel = null;
+    let pushpins = [];
+    let issuesData = [];
+    let pushpinsVisible = true;
+    let selectedPushpin = null;
+    let currentModelUrn = null;
+    let loadingModel = false;
+    let currentViewableGuid = null;
+    
+    // ========== VIEWER INITIALIZATION ==========
+    async function initViewer() {
+      const statusDiv = document.getElementById('status');
+      try {
+        updateStatus('Getting access token...', 'status');
+        const tokenResp = await fetch('/api/token');
+        const tokenData = await tokenResp.json();
+
+        updateStatus('Getting model URN...', 'status');
+        
+        // Get the first issue's viewable to load initial model
+        const issuesResp = await fetch('/api/issues');
+        const issuesData = await issuesResp.json();
+        
+        let initialUrn = null;
+        let initialModelName = 'Model';
+        
+        if (issuesData && issuesData.length > 0) {
+          const firstIssue = issuesData[0];
+          const viewableGuid = firstIssue.viewable_guid;
+          
+          if (viewableGuid) {
+            console.log('🔍 Getting URN for first issue viewable:', viewableGuid);
+            const modelResp = await fetch(`/api/model-urn-for-viewable?viewable_guid=${viewableGuid}`);
+            if (modelResp.ok) {
+              const modelData = await modelResp.json();
+              initialUrn = modelData.urn;
+              initialModelName = modelData.model_name;
+              console.log('✅ Will load:', initialModelName);
+            }
+          }
+        }
+        
+        // Fallback to old method if above fails
+        if (!initialUrn) {
+          const urnResp = await fetch('/api/model-urn');
+          const urnData = await urnResp.json();
+          initialUrn = urnData.urn;
+          initialModelName = urnData.filename || 'Model';
+        }
+        
+        const urnData = { urn: initialUrn, filename: initialModelName };
+        currentModelUrn = initialUrn;
+        
+        // Update model name display
+        const modelNameDiv = document.getElementById('model-name');
+        if (modelNameDiv && urnData.filename) {
+          modelNameDiv.textContent = urnData.filename;
+          console.log('Model name set to:', urnData.filename);
+        }
+
+        // Set initial viewable GUID from first issue
+        if (issuesData && issuesData.length > 0 && issuesData[0].viewable_guid) {
+          currentViewableGuid = issuesData[0].viewable_guid;
+          console.log('🔑 Initial viewable GUID:', currentViewableGuid);
+        }
+
+        const options = {
+          env: 'AutodeskProduction',
+          api: 'derivativeV2',
+          accessToken: tokenData.access_token
+        };
+
+        Autodesk.Viewing.Initializer(options, function() {
+          const viewerDiv = document.getElementById('viewer');
+          viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
+          if (viewer.start() > 0) {
+            updateStatus('❌ Failed to start viewer', 'error');
+            return;
+          }
+          const documentId = 'urn:' + urnData.urn;
+          Autodesk.Viewing.Document.load(documentId, onDocumentLoadSuccess, onDocumentLoadFailure);
+        });
+      } catch (error) {
+        console.error(error);
+        updateStatus('❌ ' + error.message, 'error');
+      }
+    }
+
+    function onDocumentLoadSuccess(doc) {
+      const viewable = doc.getRoot().getDefaultGeometry();
+      viewer.loadDocumentNode(doc, viewable).then(model => {
+        currentModel = model;
+        
+        updateStatus('✅ Model loaded!', 'success');
+        setTimeout(() => document.getElementById('status').style.display = 'none', 3000);
+        viewer.addEventListener(Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSelectionChanged);
+        
+        // Load issues and create pushpins
+        loadIssuesAndCreatePushpins();
+      });
+    }
+
+    function onDocumentLoadFailure(code, msg) {
+      updateStatus('❌ Failed to load: ' + msg, 'error');
+    }
+
+    // ========== PUSHPINS FUNCTIONALITY ==========
+    async function loadIssuesAndCreatePushpins() {
+      try {
+        updateStatus('Loading issues...', 'status');
+        
+        const response = await fetch('/api/issues');
+        const data = await response.json();
+        
+        issuesData = data;
+        
+        // Filter issues that have coordinates AND belong to current model
+        let issuesWithCoords = data.filter(issue => 
+          issue.pin_x && issue.pin_y && issue.pin_z
+        );
+        
+        // If a specific model is loaded, filter by viewable_guid
+        if (currentViewableGuid) {
+          const beforeFilter = issuesWithCoords.length;
+          issuesWithCoords = issuesWithCoords.filter(issue => 
+            issue.viewable_guid === currentViewableGuid
+          );
+          console.log(`🔍 Filtered issues: ${beforeFilter} → ${issuesWithCoords.length} (viewable_guid: ${currentViewableGuid})`);
+        } else {
+          console.log(`Found ${issuesWithCoords.length} issues with coordinates (no filter)`);
+        }
+        
+        if (issuesWithCoords.length > 0) {
+          createPushpins(issuesWithCoords);
+          updateStatus(`✅ Loaded ${issuesWithCoords.length} pushpins`, 'success');
+          setTimeout(() => document.getElementById('status').style.display = 'none', 3000);
+        }
+        
+      } catch (error) {
+        console.error('Error loading issues:', error);
+        updateStatus('⚠️ Could not load issues', 'error');
+      }
+    }
+
+    function createPushpins(issues) {
+      // Clear existing pushpins
+      clearPushpins();
+      
+      issues.forEach((issue, index) => {
+        const x = parseFloat(issue.pin_x);
+        const y = parseFloat(issue.pin_y);
+        const z = parseFloat(issue.pin_z);
+        
+        if (isNaN(x) || isNaN(y) || isNaN(z)) {
+          return;
+        }
+        
+        const position = new THREE.Vector3(x, y, z);
+        
+        // Create pushpin element
+        const pushpinDiv = document.createElement('div');
+        pushpinDiv.className = 'custom-pushpin';
+        pushpinDiv.textContent = issue.display_id || (index + 1);
+        pushpinDiv.title = issue.title || 'Issue';
+        pushpinDiv.dataset.issueId = issue.issue_id;
+        
+        // Add click handler
+        pushpinDiv.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectPushpin(pushpinDiv, position, issue);
+        });
+        
+        // Add to viewer container
+        viewer.container.appendChild(pushpinDiv);
+        
+        // Position update function
+        function updatePushpinPosition() {
+          if (!viewer || !viewer.impl) return;
+          
+          const screenPoint = viewer.worldToClient(position);
+          
+          if (screenPoint) {
+            pushpinDiv.style.left = (screenPoint.x - 15) + 'px';
+            pushpinDiv.style.top = (screenPoint.y - 15) + 'px';
+            pushpinDiv.style.display = pushpinsVisible ? 'flex' : 'none';
+          }
+        }
+        
+        // Update on camera change
+        viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, updatePushpinPosition);
+        viewer.addEventListener(Autodesk.Viewing.VIEWER_RESIZE_EVENT, updatePushpinPosition);
+        
+        // Initial position
+        updatePushpinPosition();
+        
+        // Store pushpin data
+        pushpins.push({
+          element: pushpinDiv,
+          position: position,
+          issue: issue,
+          updatePosition: updatePushpinPosition
+        });
+      });
+      
+      console.log(`Created ${pushpins.length} pushpins`);
+    }
+
+    function clearPushpins() {
+      pushpins.forEach(pin => {
+        if (pin.element && pin.element.parentNode) {
+          pin.element.parentNode.removeChild(pin.element);
+        }
+      });
+      pushpins = [];
+      selectedPushpin = null;
+    }
+
+    function selectPushpin(pushpinElement, position, issue) {
+      // Deselect previous
+      if (selectedPushpin) {
+        selectedPushpin.classList.remove('selected');
+      }
+      
+      // Select new
+      pushpinElement.classList.add('selected');
+      selectedPushpin = pushpinElement;
+      
+      // Focus on position
+      focusOnPosition(position);
+      
+      // Show issue info
+      showIssueDetails(issue);
+    }
+
+    function focusOnPosition(position) {
+      if (!viewer) return;
+      
+      // Better zoom: closer and smoother
+      const distance = 30; // Changed from 50 - gets closer to the pushpin
+      const camera = viewer.navigation.getCamera();
+      const direction = camera.position.clone().sub(position).normalize();
+      const newPos = position.clone().add(direction.multiplyScalar(distance));
+      
+      viewer.navigation.setView(newPos, position);
+      viewer.navigation.setVerticalFov(40, true); // Add zoom effect
+    }
+
+    function showIssueDetails(issue) {
+      let info = `<strong>${issue.title || 'Issue'}</strong><br>`;
+      info += `<small>ID: ${issue.display_id}</small><br><br>`;
+      info += `<strong>Status:</strong> ${issue.status}<br>`;
+      info += `<strong>Severity:</strong> ${issue.severity || 'N/A'}<br>`;
+      info += `<strong>Assigned to:</strong> ${issue.assigned_to || 'Unassigned'}<br>`;
+      info += `<strong>Created by:</strong> ${issue.created_by}<br>`;
+      
+      if (issue.description) {
+        info += `<br><strong>Description:</strong><br>${issue.description}<br>`;
+      }
+      
+      if (issue.comment_count > 0) {
+        info += `<br><strong>Comments (${issue.comment_count}):</strong><br>`;
+        if (issue.comment_1) {
+          info += `• ${issue.comment_1_by}: ${issue.comment_1}<br>`;
+        }
+      }
+      
+      const infoDiv = document.getElementById('info');
+      infoDiv.innerHTML = info;
+      infoDiv.style.display = 'block';
+    }
+
+    function togglePushpins() {
+      pushpinsVisible = !pushpinsVisible;
+      pushpins.forEach(pin => {
+        pin.element.style.display = pushpinsVisible ? 'flex' : 'none';
+      });
+      updateStatus(pushpinsVisible ? '📍 Pushpins shown' : '📍 Pushpins hidden', 'success');
+      setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+      closeDropdown();
+    }
+
+    function onSelectionChanged(event) {
+      if (event.dbIdArray?.length > 0) {
+        viewer.getProperties(event.dbIdArray[0], props => showElementInfo(props));
+      } else {
+        // Don't clear info if a pushpin is selected
+        if (!selectedPushpin) {
+          document.getElementById('info').innerHTML = '';
+        }
+      }
+    }
+
+    function showElementInfo(props) {
+      let info = `<strong>${props.name || 'Element'}</strong><br>`;
+      info += `<small>ID: ${props.externalId || props.dbId}</small><br><br>`;
+      props.properties?.forEach(p => {
+        info += `${p.displayName}: ${p.displayValue}<br>`;
+      });
+      const infoDiv = document.getElementById('info');
+      infoDiv.innerHTML = info;
+      infoDiv.style.display = 'block';
+    }
+
+    function updateStatus(msg, cls) {
+      const div = document.getElementById('status');
+      div.textContent = msg;
+      div.className = cls;
+      div.style.display = 'block';
+    }
+
+    function resetView() {
+      viewer?.clearSelection();
+      viewer?.showAll();
+      viewer?.fitToView();
+      if (selectedPushpin) {
+        selectedPushpin.classList.remove('selected');
+        selectedPushpin = null;
+      }
+      closeDropdown();
+      updateStatus('View reset', 'success');
+      setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+    }
+
+    function fitToView() {
+      viewer?.fitToView();
+      closeDropdown();
+      updateStatus('Fitted to view', 'success');
+      setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+    }
+
+    function showAll() {
+      viewer?.showAll();
+      closeDropdown();
+      updateStatus('All objects visible', 'success');
+      setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+    }
+
+    function toggleInfo() {
+      const info = document.getElementById('info');
+      info.style.display = info.style.display === 'none' ? 'block' : 'none';
+      closeDropdown();
+    }
+
+    // ======= Dropdown Logic =======
+    const dropdownButton = document.querySelector('.dropdown-button');
+    const dropdownMenu = document.getElementById('dropdownMenu');
+
+    dropdownButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownMenu.style.display = dropdownMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    window.addEventListener('click', () => dropdownMenu.style.display = 'none');
+    function closeDropdown() { dropdownMenu.style.display = 'none'; }
+
+async function loadModelAndNavigate(issueData) {
+    if (loadingModel) {
+      console.log('⏳ Model already loading...');
+      return;
+    }
+    
+    const { viewable_guid, viewable_name, pin_x, pin_y, pin_z, display_id, issue_id } = issueData;
+    
+    try {
+      // Update model name
+      updateModelName(viewable_name);
+      
+      // Get URN for this viewable
+      updateStatus(`Getting model info...`, 'status');
+      const response = await fetch(`/api/model-urn-for-viewable?viewable_guid=${viewable_guid}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to get model URN');
+      }
+      
+      const data = await response.json();
+      
+      if (!data.urn) {
+        updateStatus('❌ No URN found', 'error');
+        return;
+      }
+      
+      console.log('📦 Model URN:', data.urn);
+      console.log('🔑 Viewable GUID:', viewable_guid);
+      
+      // Store current viewable GUID
+      currentViewableGuid = viewable_guid;  // ADD THIS LINE
+        
+        // Check if different model
+        if (currentModelUrn !== data.urn) {
+          console.log('🔄 Loading new model:', data.model_name);
+          loadingModel = true;
+          currentModelUrn = data.urn;
+          
+          updateStatus(`Loading ${data.model_name}...`, 'status');
+          
+          // Unload current model
+          if (currentModel) {
+            viewer.unloadModel(currentModel);
+            clearPushpins();
+          }
+          
+          // Load new model
+          const documentId = 'urn:' + data.urn;
+          
+          Autodesk.Viewing.Document.load(
+            documentId,
+            (doc) => onNewModelLoadSuccess(doc, issueData),
+            (errorCode, errorMsg) => {
+              console.error('❌ Failed:', errorCode, errorMsg);
+              updateStatus('❌ Failed to load model', 'error');
+              loadingModel = false;
+            }
+          );
+        } else {
+          console.log('✅ Same model, navigating');
+          navigateToIssue(issueData);
+        }
+        
+      } catch (error) {
+        console.error('❌ Error:', error);
+        updateStatus('❌ Error: ' + error.message, 'error');
+        loadingModel = false;
+      }
+    }
+
+    function onNewModelLoadSuccess(doc, issueData) {
+      const viewable = doc.getRoot().getDefaultGeometry();
+      
+      viewer.loadDocumentNode(doc, viewable).then(model => {
+        currentModel = model;
+        loadingModel = false;
+        
+        console.log('✅ Model loaded');
+        updateStatus(`✅ Model loaded`, 'success');
+        
+        // Reload pushpins
+        loadIssuesAndCreatePushpins().then(() => {
+          setTimeout(() => navigateToIssue(issueData), 500);
+        });
+      }).catch(error => {
+        console.error('❌ Error loading model:', error);
+        updateStatus('❌ Error loading model', 'error');
+        loadingModel = false;
+      });
+    }
+
+    function navigateToIssue(issueData) {
+      const { pin_x, pin_y, pin_z, display_id, issue_id, viewable_name } = issueData;
+      
+      if (viewable_name) {
+        updateModelName(viewable_name);
+      }
+      
+      if (pin_x && pin_y && pin_z) {
+        const x = parseFloat(pin_x);
+        const y = parseFloat(pin_y);
+        const z = parseFloat(pin_z);
+        
+        if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+          const position = new THREE.Vector3(x, y, z);
+          focusOnPosition(position);
+          
+          const pushpin = pushpins.find(p => p.issue.issue_id === issue_id);
+          if (pushpin) {
+            selectPushpin(pushpin.element, position, pushpin.issue);
+          }
+          
+          updateStatus(`✅ Navigated to Issue ${display_id}`, 'success');
+          setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+        }
+      }
+    }
+
+    function updateModelName(viewable_name) {
+      const modelNameDiv = document.getElementById('model-name');
+      if (modelNameDiv && viewable_name) {
+        let modelName = viewable_name;
+        if (modelName.includes('.')) {
+          modelName = modelName.split('.')[0];
+        }
+        modelNameDiv.textContent = modelName;
+      }
+    }
+
+    // ========== POWER BI INTEGRATION ==========
+// Listen for messages from ANY window (including sibling iframes via parent)
+// ✅ Unified navigation and filter message handler
+    function handleNavigationMessage(event) {
+      console.log('📨 Received message:', event.data);
+
+      // ---------- LOAD AND NAVIGATE ----------
+      if (event.data && event.data.type === 'LOAD_MODEL_AND_NAVIGATE') {
+        console.log('🚀 Loading model and navigating...');
+        loadModelAndNavigate(event.data);
+        return;
+      }
+
+      // ---------- NAVIGATE TO ISSUE ----------
+      if (event.data && event.data.type === 'NAVIGATE_TO_ISSUE') {
+        console.log('🎯 Navigating to issue...');
+        const { issue_id, display_id, pin_x, pin_y, pin_z, title, viewable_name } = event.data;
+        
+        // Update model name display
+        if (viewable_name) {
+          const modelNameDiv = document.getElementById('model-name');
+          if (modelNameDiv) {
+            modelNameDiv.textContent = viewable_name;
+            console.log('✅ Model name updated to:', viewable_name);
+          }
+        }
+        
+        if (pin_x && pin_y && pin_z) {
+          const x = parseFloat(pin_x);
+          const y = parseFloat(pin_y);
+          const z = parseFloat(pin_z);
+          
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            const position = new THREE.Vector3(x, y, z);
+            focusOnPosition(position);
+            
+            const pushpin = pushpins.find(p => p.issue.issue_id === issue_id);
+            if (pushpin) {
+              selectPushpin(pushpin.element, position, pushpin.issue);
+            }
+            
+            const displayName = display_id || title || issue_id;
+            updateStatus(`✅ Navigated to Issue ${displayName}`);
+            setTimeout(() => document.getElementById('status').style.display = 'none', 3000);
+          }
+        }
+      }
+
+      // ---------- FILTER ISSUES ----------
+      if (event.data && event.data.type === 'FILTER_ISSUES') {
+        const filters = event.data.filters;
+        console.log('🔍 Received filter:', filters);
+
+        let filteredIssues = issuesData.slice();
+
+        // Apply user filters
+        for (let column in filters) {
+          filteredIssues = filteredIssues.filter(issue => {
+            return filters[column].includes(issue[column]);
+          });
+        }
+
+        // Filter by coordinates
+        let issuesWithCoords = filteredIssues.filter(issue => 
+          issue.pin_x && issue.pin_y && issue.pin_z
+        );
+
+        // Filter by current model (if one is loaded)
+        if (currentViewableGuid) {
+          issuesWithCoords = issuesWithCoords.filter(issue => 
+            issue.viewable_guid === currentViewableGuid
+          );
+          console.log(`🔍 Filtered to current model: ${issuesWithCoords.length} issues`);
+        }
+
+        // Rebuild pushpins
+        createPushpins(issuesWithCoords);
+      }
+    }
+
+    // ---------- Register Message Listeners ----------
+    window.addEventListener('message', handleNavigationMessage);
+
+    // Also relay messages from parent to this window (in case parent receives them)
+    if (window.parent !== window) {
+      try {
+        window.parent.addEventListener('message', function(event) {
+          window.postMessage(event.data, '*');
+        });
+      } catch (e) {
+        console.log('Cannot relay from parent:', e);
+      }
+    }
+
+    // ---------- Initialize Viewer ----------
+    window.addEventListener('load', initViewer);
+
+
+    // ALSO add localStorage polling
+  setInterval(function() {
+    const stored = localStorage.getItem('navigation_message');
+    if (stored) {
+      try {
+        const message = JSON.parse(stored);
+        // Check if recent (within last 2 seconds)
+        if (message.timestamp && Date.now() - message.timestamp < 2000) {
+          console.log('📨 From localStorage:', message);
+          handleNavigationMessage({ data: message });
+          // Clear after processing
+          localStorage.removeItem('navigation_message');
+        }
+      } catch(err) {
+        console.error('Error:', err);
+      }
+    }
+  }, 500);
+
+  </script>
+</body>
+</html>

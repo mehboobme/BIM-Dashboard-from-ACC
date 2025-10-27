@@ -13,7 +13,7 @@ output/
 logs/
 *.csv
 *.json
-*.html
+#*.html
 
 # IDE
 .vscode/
