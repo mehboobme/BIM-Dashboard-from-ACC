@@ -645,11 +645,6 @@ def thumbnail_table():
     </table>
     
     <script>
-        // ========== DEBUG TEST ==========
-        alert('TABLE JAVASCRIPT IS RUNNING!');
-        console.log('🟢 TABLE SCRIPT STARTED');
-        // ================================
-        
         const debugLog = document.getElementById('debug-log');
         
         function logDebug(msg) {
@@ -1255,12 +1250,7 @@ def powerbi_wrapper():
                         viewerFrame.contentWindow.postMessage(event.data, '*');
                         showStatus(`Navigating to ${event.data.display_id}`);
                     }
-        if (event.data && event.data.type === 'LOAD_MODEL_AND_NAVIGATE') {
-                        console.log('✅ Relaying LOAD_MODEL_AND_NAVIGATE to viewer...');
-                        const viewerFrame = document.getElementById('viewer-frame');
-                        viewerFrame.contentWindow.postMessage(event.data, '*');
-                        showStatus(`Loading model for Issue ${event.data.display_id}`);
-                    }            
+                    
                     if (event.data && event.data.type === 'FILTER_ISSUES') {
                         console.log('✅ Relaying filters to viewer...');
                         const viewerFrame = document.getElementById('viewer-frame');
@@ -1289,6 +1279,1143 @@ def powerbi_wrapper():
 </body>
 </html>
 """
+
+# Complete /powerbi-embed.html endpoint with ALL features
+# Replace the existing @app.route('/powerbi-embed.html') function with this:
+
+@app.route('/powerbi-embed.html')
+def powerbi_embed():
+    """Combined viewer + thumbnails with ALL custom settings + filters + comments"""
+    
+    # Get issues data
+    if not issues_cache['data']:
+        if FETCHER_AVAILABLE and fetch_all_issues:
+            issues_cache['data'] = fetch_all_issues()
+    
+    issues = issues_cache['data'] or []
+    issues_with_coords = [i for i in issues if i.get('pin_x') and i.get('pin_y') and i.get('pin_z')]
+    
+    # Start building HTML
+    html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css">
+    <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: Arial, sans-serif; 
+            overflow: hidden;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        #viewer {
+            flex: 1;
+            position: relative;
+            min-height: 50vh;
+        }
+        
+        #table-container {
+            flex: 1;
+            overflow: auto;
+            border-top: 3px solid #667eea;
+            background: #f5f5f5;
+            padding: 10px;
+        }
+        
+        /* ========== MAKE AUTODESK INBUILT ICONS SMALLER ========== */
+        .adsk-viewing-viewer .adsk-button,
+        .adsk-control-group .adsk-button {
+            width: 20px !important;
+            height: 20px !important;
+            min-width: 20px !important;
+            min-height: 20px !important;
+            margin: 1px !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: visible !important;
+            line-height: 20px !important;
+        }
+
+        .adsk-viewing-viewer .adsk-button .adsk-icon,
+        .adsk-viewing-viewer .adsk-button svg,
+        .adsk-viewing-viewer .adsk-button img,
+        .adsk-control-group .adsk-button .adsk-icon,
+        .adsk-control-group .adsk-button svg,
+        .adsk-control-group .adsk-button img {
+            transform: scale(0.1) !important;
+            transform-origin: center center !important;
+            flex-shrink: 0 !important;
+        }
+
+        .adsk-viewing-viewer .adsk-button .adsk-icon *,
+        .adsk-viewing-viewer .adsk-button svg *,
+        .adsk-control-group .adsk-button .adsk-icon *,
+        .adsk-control-group .adsk-button svg * {
+            transform: scale(1) !important;
+        }
+
+        .adsk-viewing-viewer .adsk-toolbar,
+        .adsk-toolbar-group,
+        .adsk-control-group {
+            height: auto !important;
+            padding: 1px !important;
+        }
+
+        .adsk-viewing-viewer .adsk-toolbar-group {
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        .adsk-viewing-viewer .homeViewWrapper {
+            width: 20px !important;
+            height: 20px !important;
+        }
+
+        .adsk-viewing-viewer .homeViewWrapper canvas {
+            width: 20px !important;
+            height: 20px !important;
+        }
+        /* ========================================================= */
+
+        /* ======= DROPDOWN MENU ======= */
+        .dropdown {
+            position: absolute;
+            top: 25px;
+            right: 10px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dropdown-button {
+            width: 25px;
+            height: 25px;
+            border: none;
+            border-radius: 50px;
+            background: #3498db;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dropdown-button:hover {
+            background: #2980b9;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            top: 25px;
+            right: 0;
+            background-color: rgba(255,255,255,0.97);
+            min-width: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 10px;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        .dropdown-content button {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            background: none;
+            border: none;
+            padding: 5px 5px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 10px;
+            color: #333;
+            transition: background 0.2s;
+        }
+
+        .dropdown-content button:hover {
+            background: #f1f1f1;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: white;
+            background: #3498db;
+            font-size: 15px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            display: none;
+        }
+
+        #model-name {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
+
+        #info {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            z-index: 100;
+            background: rgba(255,255,255,0.95);
+            border-radius: 8px;
+            padding: 5px;
+            width: 150px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            font-size: 10px;
+        }
+
+        .error { background: #e74c3c !important; }
+        .success { background: #2ecc71 !important; }
+
+        /* ========== PUSHPIN STYLES ========== */
+        .custom-pushpin {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: #e74c3c;
+            border: 0px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            transition: all 0.2s;
+            z-index: 50;
+        }
+
+        .custom-pushpin:hover {
+            transform: scale(1.3);
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+        }
+
+        .custom-pushpin.selected {
+            background: #2ecc71;
+            transform: scale(1.4);
+            z-index: 1000;
+        }
+
+        /* ========== THUMBNAIL TABLE ========== */
+        .thumbnail-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        
+        .thumbnail-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3px;
+            text-align: center;
+            font-size: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .thumbnail-table td {
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 11px;
+        }
+        
+        .thumbnail-img {
+            width: 70px;
+            height: 52px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid #ddd;
+            transition: all 0.2s;
+        }
+        
+        .thumbnail-img:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+        }
+        
+        .clickable-row {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        
+        .clickable-row:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        
+        .status-open { background: #fff3cd; color: #856404; }
+        .status-closed { background: #d4edda; color: #155724; }
+
+        /* ========== EXCEL-STYLE FILTERS ========== */
+        .filterable-header {
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filterable-header:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a4a9e 100%);
+        }
+
+        .filter-icon {
+            font-size: 10px;
+            margin-left: 5px;
+            opacity: 0.7;
+        }
+
+        .filterable-header.filtered .filter-icon {
+            color: #ffd700;
+            opacity: 1;
+            font-weight: bold;
+        }
+
+        .filter-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            color: #333;
+        }
+
+        .filter-dropdown.active {
+            display: block;
+        }
+
+        .filter-search {
+            width: calc(100% - 20px);
+            padding: 8px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .filter-options {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .filter-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #333;
+        }
+
+        .filter-option:hover {
+            background: #f0f0f0;
+        }
+
+        .filter-option label {
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 5px;
+            padding: 10px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .filter-btn {
+            flex: 1;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .filter-btn-apply {
+            background: #667eea;
+            color: white;
+        }
+
+        .filter-btn-apply:hover {
+            background: #5568d3;
+        }
+
+        .filter-btn-clear {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .filter-btn-clear:hover {
+            background: #d0d0d0;
+        }
+
+        .filter-status-bar {
+            background: #f0f0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .filter-status-bar.active {
+            display: block;
+        }
+
+        .filter-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            font-size: 11px;
+        }
+
+        .filter-tag .remove {
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewer">
+            <div id="status">Initializing...</div>
+            <div id="model-name">Loading model...</div>
+            
+            <!-- Dropdown Menu -->
+            <div class="dropdown">
+                <button class="dropdown-button">☰</button>
+                <div class="dropdown-content" id="dropdownMenu">
+                    <button onclick="resetView()">🔄 Reset View</button>
+                    <button onclick="fitToView()">📐 Fit to View</button>
+                    <button onclick="showAll()">👁️ Show All</button>
+                    <button onclick="togglePushpins()">📍 Toggle Pushpins</button>
+                    <button onclick="toggleInfo()">ℹ️ Info Panel</button>
+                </div>
+            </div>
+            
+            <div id="info"></div>
+        </div>
+        
+        <div id="table-container">
+            <table class="thumbnail-table">
+                <thead>
+                    <tr>
+                        <th>Thumbnail</th>
+                        <th class="filterable-header" data-column="display_id">
+                            ID <span class="filter-icon">▼</span>
+                        </th>
+                        <th class="filterable-header" data-column="title">
+                            Title <span class="filter-icon">▼</span>
+                        </th>
+                        <th class="filterable-header" data-column="status">
+                            Status <span class="filter-icon">▼</span>
+                        </th>
+                        <th class="filterable-header" data-column="severity">
+                            Severity <span class="filter-icon">▼</span>
+                        </th>
+                        <th class="filterable-header" data-column="assigned_to">
+                            Assigned To <span class="filter-icon">▼</span>
+                        </th>
+                        <th>Comments</th>
+                        <th>Comments By</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        let viewer = null;
+        let currentModel = null;
+        let currentModelUrn = null;
+        let currentViewableGuid = null;
+        let issuesData = [];
+        let pushpins = [];
+        let loadingModel = false;
+        let pushpinsVisible = true;
+        let selectedPushpin = null;
+        let activeFilters = {};
+        let currentDropdown = null;
+        
+        // Store issue data from server
+        const allIssuesData = [
+"""
+    
+    # Add issue data as JavaScript array
+    for issue in issues_with_coords:
+        # Pre-process strings to escape quotes (avoid backslash in f-string)
+        # Convert to string first to avoid AttributeError
+        issue_id = str(issue.get('issue_id', '')).replace("'", "&#39;")
+        display_id = str(issue.get('display_id', '')).replace("'", "&#39;")
+        title = str(issue.get('title', '')).replace("'", "&#39;")
+        status = str(issue.get('status', '')).replace("'", "&#39;")
+        severity = str(issue.get('severity', '')).replace("'", "&#39;")
+        assigned_to = str(issue.get('assigned_to', '')).replace("'", "&#39;")
+        comment_1 = str(issue.get('comment_1', '')).replace("'", "&#39;")
+        comment_1_by = str(issue.get('comment_1_by', '')).replace("'", "&#39;")
+        thumbnail = issue.get('thumbnail_base64', '')
+        viewable_name = str(issue.get('viewable_name', 'Model'))
+        viewable_guid = str(issue.get('viewable_guid', ''))
+        if '.' in viewable_name:
+            viewable_name = viewable_name.rsplit('.', 1)[0]
+        
+        pin_x = issue.get('pin_x', 0)
+        pin_y = issue.get('pin_y', 0)
+        pin_z = issue.get('pin_z', 0)
+        
+        html += f"""
+            {{
+                issue_id: '{issue_id}',
+                display_id: '{display_id}',
+                title: '{title}',
+                status: '{status}',
+                severity: '{severity}',
+                assigned_to: '{assigned_to}',
+                comment_1: '{comment_1}',
+                comment_1_by: '{comment_1_by}',
+                pin_x: {pin_x},
+                pin_y: {pin_y},
+                pin_z: {pin_z},
+                viewable_name: '{viewable_name}',
+                viewable_guid: '{viewable_guid}',
+                thumbnail: `{thumbnail}`
+            }},
+"""
+    
+    html += """
+        ];
+        
+        // Initialize viewer
+        async function initViewer() {
+            updateStatus('Getting access token...', 'status');
+            
+            try {
+                const tokenResp = await fetch('/api/token');
+                const tokenData = await tokenResp.json();
+                
+                const options = {
+                    env: 'AutodeskProduction',
+                    api: 'derivativeV2',
+                    accessToken: tokenData.access_token
+                };
+                
+                Autodesk.Viewing.Initializer(options, function() {
+                    const viewerDiv = document.getElementById('viewer');
+                    viewer = new Autodesk.Viewing.GuiViewer3D(viewerDiv);
+                    viewer.start();
+                    
+                    updateStatus('Loading issues...', 'status');
+                    loadIssuesTable();
+                    initColumnFilters();
+                });
+            } catch(error) {
+                console.error('Init error:', error);
+                updateStatus('❌ Initialization failed', 'error');
+            }
+        }
+        
+        // Load issues and create table
+        function loadIssuesTable() {
+            issuesData = allIssuesData;
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            
+            issuesData.forEach((issue, idx) => {
+                const row = document.createElement('tr');
+                row.className = 'clickable-row';
+                row.onclick = () => handleIssueClick(issue, idx);
+                row.dataset.index = idx;
+                
+                const statusClass = issue.status.toLowerCase().includes('closed') ? 'status-closed' : 'status-open';
+                const comments = issue.comment_1 || 'No comments';
+                const commentsShort = comments.length > 50 ? comments.substring(0, 50) + '...' : comments;
+                
+                row.innerHTML = `
+                    <td><img class="thumbnail-img" src="${issue.thumbnail || ''}" onerror="this.style.display='none'" /></td>
+                    <td><strong>${issue.display_id}</strong></td>
+                    <td>${issue.title}</td>
+                    <td><span class="status-badge ${statusClass}">${issue.status}</span></td>
+                    <td>${issue.severity || 'N/A'}</td>
+                    <td>${issue.assigned_to || 'Unassigned'}</td>
+                    <td>${commentsShort}</td>
+                    <td>${issue.comment_1_by || ''}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            updateStatus(`✅ Loaded ${issuesData.length} issues`, 'success');
+            setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+        }
+        
+        // Handle issue click - load model and navigate
+        async function handleIssueClick(issue, idx) {
+            if (loadingModel) {
+                console.log('⏳ Model already loading...');
+                return;
+            }
+            
+            console.log('🔵 Issue clicked:', issue.display_id);
+            
+            try {
+                updateStatus(`Getting model info...`, 'status');
+                
+                // Get model URN
+                const response = await fetch(`/api/model-urn-for-viewable?viewable_guid=${issue.viewable_guid}`);
+                const data = await response.json();
+                
+                if (!data.urn) {
+                    updateStatus('❌ Model URN not found', 'error');
+                    return;
+                }
+                
+                console.log('📦 Model URN:', data.urn);
+                
+                // Update model name
+                updateModelName(data.model_name || issue.viewable_name);
+                
+                // Check if different model
+                if (currentModelUrn !== data.urn) {
+                    console.log('🔄 Loading new model:', data.model_name);
+                    loadingModel = true;
+                    currentModelUrn = data.urn;
+                    currentViewableGuid = issue.viewable_guid;
+                    
+                    updateStatus(`Loading ${data.model_name}...`, 'status');
+                    
+                    // Unload current model
+                    if (currentModel) {
+                        viewer.unloadModel(currentModel);
+                        clearPushpins();
+                    }
+                    
+                    // Load new model
+                    const documentId = 'urn:' + data.urn;
+                    Autodesk.Viewing.Document.load(documentId, 
+                        (doc) => onModelLoadSuccess(doc, issue),
+                        (errorCode, errorMsg) => {
+                            console.error('❌ Failed:', errorCode, errorMsg);
+                            updateStatus('❌ Failed to load model', 'error');
+                            loadingModel = false;
+                        }
+                    );
+                } else {
+                    console.log('✅ Same model, navigating');
+                    navigateToIssue(issue);
+                }
+                
+            } catch(error) {
+                console.error('❌ Error:', error);
+                updateStatus('❌ Error: ' + error.message, 'error');
+                loadingModel = false;
+            }
+        }
+        
+        function onModelLoadSuccess(doc, issue) {
+            const viewable = doc.getRoot().getDefaultGeometry();
+            
+            viewer.loadDocumentNode(doc, viewable).then(model => {
+                currentModel = model;
+                loadingModel = false;
+                
+                console.log('✅ Model loaded');
+                updateStatus('✅ Model loaded', 'success');
+                
+                // Create pushpins for this model
+                createPushpinsForCurrentModel();
+                
+                // Navigate to issue
+                setTimeout(() => navigateToIssue(issue), 500);
+            }).catch(error => {
+                console.error('❌ Error loading model:', error);
+                updateStatus('❌ Error loading model', 'error');
+                loadingModel = false;
+            });
+        }
+        
+        // Navigate to issue location
+        function navigateToIssue(issue) {
+            if (issue.pin_x && issue.pin_y && issue.pin_z) {
+                const x = parseFloat(issue.pin_x);
+                const y = parseFloat(issue.pin_y);
+                const z = parseFloat(issue.pin_z);
+                
+                if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                    const position = new THREE.Vector3(x, y, z);
+                    focusOnPosition(position);
+                    
+                    // Highlight the pushpin
+                    const pushpin = pushpins.find(p => p.issue && p.issue.issue_id === issue.issue_id);
+                    if (pushpin) {
+                        selectPushpin(pushpin.element, position, pushpin.issue);
+                    }
+                    
+                    updateStatus(`✅ Navigated to Issue ${issue.display_id}`, 'success');
+                    setTimeout(() => document.getElementById('status').style.display = 'none', 2000);
+                }
+            }
+        }
+        
+        function focusOnPosition(position) {
+            const distance = 30;
+            const camera = viewer.navigation.getCamera();
+            const direction = camera.position.clone().sub(position).normalize();
+            const newPos = position.clone().add(direction.multiplyScalar(distance));
+            
+            viewer.navigation.setView(newPos, position);
+            viewer.navigation.setVerticalFov(40, true);
+        }
+        
+        // Create pushpins for current model
+        function createPushpinsForCurrentModel() {
+            clearPushpins();
+            
+            if (!currentViewableGuid) return;
+            
+            // Apply filters to determine which pushpins to show
+            let modelIssues = issuesData.filter(issue => 
+                issue.viewable_guid === currentViewableGuid &&
+                issue.pin_x && issue.pin_y && issue.pin_z
+            );
+            
+            // Apply active filters
+            for (let column in activeFilters) {
+                modelIssues = modelIssues.filter(issue => 
+                    activeFilters[column].includes(issue[column])
+                );
+            }
+            
+            console.log(`📍 Creating ${modelIssues.length} pushpins for current model`);
+            
+            modelIssues.forEach((issue) => {
+                const position = new THREE.Vector3(
+                    parseFloat(issue.pin_x),
+                    parseFloat(issue.pin_y),
+                    parseFloat(issue.pin_z)
+                );
+                
+                const pushpinDiv = document.createElement('div');
+                pushpinDiv.className = 'custom-pushpin';
+                pushpinDiv.textContent = issue.display_id;
+                pushpinDiv.title = issue.title;
+                
+                pushpinDiv.onclick = (e) => {
+                    e.stopPropagation();
+                    selectPushpin(pushpinDiv, position, issue);
+                    focusOnPosition(position);
+                };
+                
+                viewer.container.appendChild(pushpinDiv);
+                
+                function updatePosition() {
+                    if (!viewer || !viewer.impl) return;
+                    const screenPoint = viewer.worldToClient(position);
+                    if (screenPoint) {
+                        pushpinDiv.style.left = (screenPoint.x - 7.5) + 'px';
+                        pushpinDiv.style.top = (screenPoint.y - 7.5) + 'px';
+                        pushpinDiv.style.display = pushpinsVisible ? 'flex' : 'none';
+                    }
+                }
+                
+                viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, updatePosition);
+                updatePosition();
+                
+                pushpins.push({ element: pushpinDiv, position: position, issue: issue });
+            });
+        }
+        
+        function selectPushpin(element, position, issue) {
+            if (selectedPushpin) {
+                selectedPushpin.classList.remove('selected');
+            }
+            
+            element.classList.add('selected');
+            selectedPushpin = element;
+            
+            showIssueDetails(issue);
+        }
+        
+        function showIssueDetails(issue) {
+            let info = `<strong>${issue.title || 'Issue'}</strong><br>`;
+            info += `<small>ID: ${issue.display_id}</small><br><br>`;
+            info += `<strong>Status:</strong> ${issue.status}<br>`;
+            info += `<strong>Severity:</strong> ${issue.severity || 'N/A'}<br>`;
+            info += `<strong>Assigned:</strong> ${issue.assigned_to || 'Unassigned'}<br>`;
+            
+            if (issue.comment_1) {
+                info += `<br><strong>Comment:</strong><br>${issue.comment_1.substring(0, 100)}<br>`;
+                info += `<strong>By:</strong> ${issue.comment_1_by}<br>`;
+            }
+            
+            const infoDiv = document.getElementById('info');
+            infoDiv.innerHTML = info;
+            infoDiv.style.display = 'block';
+        }
+        
+        function clearPushpins() {
+            pushpins.forEach(pin => {
+                if (pin.element && pin.element.parentNode) {
+                    pin.element.parentNode.removeChild(pin.element);
+                }
+            });
+            pushpins = [];
+            selectedPushpin = null;
+        }
+        
+        function updateModelName(name) {
+            const modelNameDiv = document.getElementById('model-name');
+            if (modelNameDiv && name) {
+                let modelName = name;
+                if (modelName.includes('.')) {
+                    modelName = modelName.split('.')[0];
+                }
+                modelNameDiv.textContent = modelName;
+            }
+        }
+        
+        function updateStatus(msg, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = msg;
+            statusDiv.style.display = 'block';
+            
+            statusDiv.className = '';
+            if (type === 'error') statusDiv.classList.add('error');
+            if (type === 'success') statusDiv.classList.add('success');
+        }
+        
+        // Dropdown menu functions
+        function resetView() {
+            if (viewer) {
+                viewer.clearSelection();
+                viewer.showAll();
+                viewer.fitToView();
+            }
+            if (selectedPushpin) {
+                selectedPushpin.classList.remove('selected');
+                selectedPushpin = null;
+            }
+            closeDropdown();
+        }
+        
+        function fitToView() {
+            if (viewer) viewer.fitToView();
+            closeDropdown();
+        }
+        
+        function showAll() {
+            if (viewer) {
+                viewer.showAll();
+                viewer.fitToView();
+            }
+            closeDropdown();
+        }
+        
+        function togglePushpins() {
+            pushpinsVisible = !pushpinsVisible;
+            pushpins.forEach(pin => {
+                if (pin.element) {
+                    pin.element.style.display = pushpinsVisible ? 'flex' : 'none';
+                }
+            });
+            closeDropdown();
+        }
+        
+        function toggleInfo() {
+            const infoDiv = document.getElementById('info');
+            infoDiv.style.display = infoDiv.style.display === 'none' ? 'block' : 'none';
+            closeDropdown();
+        }
+        
+        function closeDropdown() {
+            document.getElementById('dropdownMenu').style.display = 'none';
+        }
+        
+        // Dropdown toggle
+        const dropdownButton = document.querySelector('.dropdown-button');
+        const dropdownMenu = document.getElementById('dropdownMenu');
+        
+        dropdownButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdownMenu.style.display = dropdownMenu.style.display === 'block' ? 'none' : 'block';
+        });
+        
+        window.addEventListener('click', () => dropdownMenu.style.display = 'none');
+        
+        // ========== EXCEL-STYLE FILTER FUNCTIONS ==========
+        function initColumnFilters() {
+            const headers = document.querySelectorAll('.filterable-header');
+            
+            headers.forEach(header => {
+                header.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const column = this.dataset.column;
+                    toggleFilterDropdown(this, column);
+                });
+            });
+            
+            document.addEventListener('click', function() {
+                if (currentDropdown) {
+                    currentDropdown.remove();
+                    currentDropdown = null;
+                }
+            });
+        }
+
+        function toggleFilterDropdown(headerElement, column) {
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+            
+            const values = [...new Set(allIssuesData.map(item => item[column]))].filter(Boolean).sort();
+            
+            const dropdown = document.createElement('div');
+            dropdown.className = 'filter-dropdown active';
+            dropdown.onclick = (e) => e.stopPropagation();
+            
+            dropdown.innerHTML = `
+                <input type="text" class="filter-search" placeholder="Search..." onkeyup="filterDropdownOptions(this)">
+                <div class="filter-options">
+                    <div class="filter-option">
+                        <input type="checkbox" id="select-all-${column}" checked onchange="toggleSelectAll('${column}')">
+                        <label for="select-all-${column}"><strong>(Select All)</strong></label>
+                    </div>
+                    ${values.map(value => `
+                        <div class="filter-option" data-value="${value}">
+                            <input type="checkbox" id="filter-${column}-${value}" value="${value}" checked>
+                            <label for="filter-${column}-${value}">${value}</label>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="filter-actions">
+                    <button class="filter-btn filter-btn-apply" onclick="applyColumnFilter('${column}')">OK</button>
+                    <button class="filter-btn filter-btn-clear" onclick="clearColumnFilter('${column}')">Clear</button>
+                </div>
+            `;
+            
+            headerElement.appendChild(dropdown);
+            currentDropdown = dropdown;
+            
+            if (activeFilters[column]) {
+                const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:not(#select-all-' + column + ')');
+                checkboxes.forEach(cb => {
+                    cb.checked = activeFilters[column].includes(cb.value);
+                });
+                updateSelectAll(column);
+            }
+        }
+
+        function filterDropdownOptions(searchInput) {
+            const searchTerm = searchInput.value.toLowerCase();
+            const options = searchInput.parentElement.querySelectorAll('.filter-option:not(:first-child)');
+            
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+            });
+        }
+
+        function toggleSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+            });
+        }
+
+        function updateSelectAll(column) {
+            const selectAll = document.getElementById('select-all-' + column);
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]`);
+            const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            selectAll.checked = checkedCount === checkboxes.length;
+        }
+
+        function applyColumnFilter(column) {
+            const checkboxes = document.querySelectorAll(`input[id^="filter-${column}-"]:checked`);
+            const selectedValues = Array.from(checkboxes).map(cb => cb.value);
+            
+            const allValues = allIssuesData.map(i => i[column]).filter(Boolean);
+            const uniqueValues = [...new Set(allValues)];
+            
+            if (selectedValues.length === 0 || selectedValues.length === uniqueValues.length) {
+                delete activeFilters[column];
+            } else {
+                activeFilters[column] = selectedValues;
+            }
+            
+            applyAllFilters();
+            updateFilterStatus();
+            
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function clearColumnFilter(column) {
+            delete activeFilters[column];
+            applyAllFilters();
+            updateFilterStatus();
+            
+            if (currentDropdown) {
+                currentDropdown.remove();
+                currentDropdown = null;
+            }
+        }
+
+        function applyAllFilters() {
+            let visibleCount = 0;
+            const tbody = document.getElementById('table-body');
+            const rows = tbody.querySelectorAll('tr');
+            
+            rows.forEach((row, idx) => {
+                const issue = allIssuesData[idx];
+                if (!issue) return;
+                
+                let shouldShow = true;
+                
+                for (let column in activeFilters) {
+                    if (!activeFilters[column].includes(issue[column])) {
+                        shouldShow = false;
+                        break;
+                    }
+                }
+                
+                row.style.display = shouldShow ? 'table-row' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+            
+            // Update filtered issuesData for pushpins
+            if (Object.keys(activeFilters).length > 0) {
+                issuesData = allIssuesData.filter(issue => {
+                    for (let column in activeFilters) {
+                        if (!activeFilters[column].includes(issue[column])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+            } else {
+                issuesData = allIssuesData;
+            }
+            
+            // Update filter icons
+            document.querySelectorAll('.filterable-header').forEach(header => {
+                const column = header.dataset.column;
+                if (activeFilters[column]) {
+                    header.classList.add('filtered');
+                } else {
+                    header.classList.remove('filtered');
+                }
+            });
+            
+            // Recreate pushpins with filtered data
+            if (currentModel && currentViewableGuid) {
+                createPushpinsForCurrentModel();
+            }
+            
+            console.log(`Showing ${visibleCount} of ${allIssuesData.length} issues`);
+        }
+
+        function updateFilterStatus() {
+            let statusBar = document.querySelector('.filter-status-bar');
+            
+            if (!statusBar) {
+                statusBar = document.createElement('div');
+                statusBar.className = 'filter-status-bar';
+                const table = document.querySelector('.thumbnail-table');
+                table.parentElement.insertBefore(statusBar, table);
+            }
+            
+            if (Object.keys(activeFilters).length === 0) {
+                statusBar.classList.remove('active');
+                return;
+            }
+            
+            statusBar.classList.add('active');
+            statusBar.innerHTML = '<strong>Active Filters:</strong> ' + 
+                Object.entries(activeFilters).map(([column, values]) => {
+                    const label = column.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    return `<span class="filter-tag">${label}: ${values.join(', ')} <span class="remove" onclick="clearColumnFilter('${column}')">×</span></span>`;
+                }).join('');
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', initViewer);
+    </script>
+</body>
+</html>
+"""
+    
+    return html
 
 @app.route('/api/debug/first-issue')
 def debug_first_issue():
