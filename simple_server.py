@@ -10,6 +10,7 @@ import os
 import base64
 import time
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -316,7 +317,7 @@ def thumbnail_table():
         body { 
             font-family: 'Segoe UI', sans-serif;
             background: #f5f5f5;
-            padding: 10px;
+            padding: 2px;
         }
         .thumbnail-table { 
             width: 100%; 
@@ -324,19 +325,19 @@ def thumbnail_table():
             background: white;
         }
         .thumbnail-table thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #004E43;
             color: white;
             position: sticky;
             top: 0;
             z-index: 100;
         }
         .thumbnail-table th {
-            padding: 3px 3px;
+            padding: 1px 1px;
             text-align: center;
             font-size: 12px;
             font-weight: 600;
             top: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #004E43;;
             z-index: 100;
         }
         .thumbnail-table td {
@@ -579,6 +580,101 @@ def thumbnail_table():
 </head>
 <body>
 
+<div style="padding: 10px; background: white; margin-bottom: 10px; border-radius: 4px;">
+    <!-- Open in Browser link - shown in Power BI -->
+    <div id="powerbi-buttons" style="display: none;">
+        <a href="http://localhost:5000/thumbnail-table.html" target="_blank" style="
+            display: inline-block;
+            background: #004E43;
+            color: white;
+            border: none;
+            padding: 5px 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        ">🌐 Open in Browser</a>
+        <span style="font-size: 12px; color: #666; margin-left: 2px;margin-top: 2px; margin-bottom: 2px; display: inline-block;">
+            Click to open in external browser for export functionality
+        </span>
+    </div>
+    
+    <!-- Export buttons - shown in regular browser -->
+    <div id="browser-buttons" style="display: none; gap: 10px; flex-wrap: wrap;">
+                
+        <button onclick="exportToCSV()" style="
+            background: #004E43;
+            color: white;
+            border: none;
+            padding: 5px 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        ">📄 Export CSV (no images)</button>
+        
+        <button onclick="exportRealExcel()" style="
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        ">📊 Export Real Excel (with images)</button>
+    </div>
+</div>
+
+<script>
+    // Enhanced detection with debug info
+    function detectEnvironment() {
+        const debugDiv = document.getElementById('debug-info');
+        let debugInfo = '';
+        
+        try {
+            const inIframe = window.self !== window.top;
+            const windowLocation = window.location.href;
+            const parentAccessible = (function() {
+                try {
+                    return window.parent.location.href !== window.location.href;
+                } catch(e) {
+                    return true; // Can't access parent = in iframe
+                }
+            })();
+            
+            debugInfo += 'In iframe: ' + inIframe + '<br>';
+            debugInfo += 'Parent accessible: ' + parentAccessible + '<br>';
+            debugInfo += 'Current URL: ' + windowLocation + '<br>';
+            
+            if (inIframe || parentAccessible) {
+                document.getElementById('powerbi-buttons').style.display = 'block';
+                document.getElementById('browser-buttons').style.display = 'none';
+                debugInfo += '<strong style="color: red;">MODE: Power BI (iframe detected)</strong>';
+            } else {
+                document.getElementById('powerbi-buttons').style.display = 'none';
+                document.getElementById('browser-buttons').style.display = 'flex';
+                debugInfo += '<strong style="color: green;">MODE: Browser (standalone)</strong>';
+            }
+        } catch (e) {
+            debugInfo += '<strong style="color: orange;">ERROR: ' + e.message + '</strong><br>';
+            document.getElementById('powerbi-buttons').style.display = 'block';
+            document.getElementById('browser-buttons').style.display = 'none';
+        }
+        
+        debugDiv.innerHTML = debugInfo;
+    }
+    
+    detectEnvironment();
+</script>
+
+
+
+
+
+<table class="thumbnail-table">
     <div id="debug-log" style="display:none;">Loading...</div>
      <!-- ========== ADD FILTER CONTAINER HERE ========== -->
     
@@ -663,50 +759,94 @@ def thumbnail_table():
 """
         
         # Add issue data as JavaScript array
+
+
         for issue in issues_with_coords:
-            issue_id = issue.get('issue_id', '').replace("'", "\\'")
-            title = issue.get('title', '').replace("'", "\\'")
+            issue_id = issue.get('issue_id', '')
+            title = issue.get('title', '')
             thumbnail = issue.get('thumbnail_base64', '')
             
-        # Get viewable info
+            # Get viewable info
             viewable_name = issue.get('viewable_name', 'Model')
             viewable_guid = issue.get('viewable_guid', '')
             if '.' in viewable_name:
                 viewable_name = viewable_name.rsplit('.', 1)[0]
             
+            # Properly escape all strings for JavaScript
+            issue_id_safe = json.dumps(issue_id)
+            display_id_safe = json.dumps(issue.get('display_id', ''))
+            title_safe = json.dumps(title)
+            status_safe = json.dumps(issue.get('status', ''))
+            severity_safe = json.dumps(issue.get('severity', ''))
+            assigned_to_safe = json.dumps(issue.get('assigned_to', ''))
+            viewable_name_safe = json.dumps(viewable_name)
+            viewable_guid_safe = json.dumps(viewable_guid)
+            thumbnail_safe = json.dumps(thumbnail)
+            comment_1_safe = json.dumps(issue.get('comment_1', ''))
+            comment_1_by_safe = json.dumps(issue.get('comment_1_by', ''))
+            comment_count = issue.get('comment_count', 0)
+            
             html += f"""
-            {{
-                issue_id: '{issue_id}',
-                display_id: '{issue.get('display_id', '')}',
-                title: '{title}',
-                status: '{issue.get('status', '')}',
-                severity: '{issue.get('severity', '')}',
-                assigned_to: '{issue.get('assigned_to', '')}',
-                pin_x: {issue.get('pin_x', 0)},
-                pin_y: {issue.get('pin_y', 0)},
-                pin_z: {issue.get('pin_z', 0)},
-                viewable_name: '{viewable_name}',
-                viewable_guid: '{viewable_guid}',
-                thumbnail: `{thumbnail}`
-            }},
-"""
+                {{
+                    issue_id: {issue_id_safe},
+                    display_id: {display_id_safe},
+                    title: {title_safe},
+                    status: {status_safe},
+                    severity: {severity_safe},
+                    assigned_to: {assigned_to_safe},
+                    pin_x: {issue.get('pin_x', 0)},
+                    pin_y: {issue.get('pin_y', 0)},
+                    pin_z: {issue.get('pin_z', 0)},
+                    viewable_name: {viewable_name_safe},
+                    viewable_guid: {viewable_guid_safe},
+                    thumbnail: {thumbnail_safe},
+                    comment_1: {comment_1_safe},
+                    comment_1_by: {comment_1_by_safe},
+                    comment_count: {comment_count}
+                }},
+        """
         
         html += """
         ];
         
         // Load images after page loads
         window.onload = function(){
+            console.log('🔍 Total issues:', issuesData.length);
             logDebug('Page loaded');            
             issuesData.forEach((issue, idx) => {
                 const img = document.getElementById('img_' + idx);
-                if (img && issue.thumbnail) {
-                    img.src = issue.thumbnail;
-                    logDebug('Loaded img ' + idx);
+                
+                // Debug each image
+                console.log(`Issue ${idx} (${issue.display_id}):`, {
+                    has_img: !!img,
+                    has_thumb: !!issue.thumbnail,
+                    thumb_len: issue.thumbnail ? issue.thumbnail.length : 0
+                });
+                
+                if (img) {
+                    if (issue.thumbnail && issue.thumbnail.length > 0) {
+                        img.src = issue.thumbnail;
+                        
+                        // Add error handler
+                        img.onerror = function() {
+                            console.error('❌ Failed:', issue.display_id);
+                            this.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzAiIGhlaWdodD0iNTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjcwIiBoZWlnaHQ9IjUyIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                        };
+                        
+                        img.onload = function() {
+                            console.log('✅ Loaded:', issue.display_id);
+                        };
+                        
+                        logDebug('Set img ' + idx);
+                    } else {
+                        console.warn('⚠️ Empty thumbnail:', issue.display_id);
+                        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzAiIGhlaWdodD0iNTIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjcwIiBoZWlnaHQ9IjUyIiBmaWxsPSIjZTBlMGUwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                    }
                 }
             });
-                     
-            logDebug('All loaded!');
-        };
+                    
+            logDebug('Done!');
+};
                             
         function handleRowClick(idx) {
             const issue = issuesData[idx];
@@ -765,7 +905,13 @@ def thumbnail_table():
             
             logDebug('Message broadcast complete');
         }
+                              
+            function exportRealExcel() {
+                console.log('📊 Downloading real Excel...');
+                    window.location.href = '/api/export-excel-with-images';
+                }
         
+
         // ========== EXCEL-STYLE FILTER FUNCTIONS ==========
         let activeFilters = {};
         let currentDropdown = null;
@@ -1017,6 +1163,144 @@ def thumbnail_table():
             });
         }
         
+        // ========== EXCEL EXPORT FUNCTION ==========
+        
+        // Export to Excel WITH thumbnails (HTML method - Excel may have display issues with large images)
+        function exportToExcel() {
+            try {
+                console.log('📥 Exporting with thumbnails...');
+                
+                let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
+                html += '<head><meta charset="utf-8"><style>';
+                html += 'table { border-collapse: collapse; } ';
+                html += 'th, td { border: 1px solid black; } ';
+                html += 'th { background: #004E43; color: white; padding: 8px; font-weight: bold; } ';
+                html += 'td { padding: 4px; vertical-align: middle; } ';
+                html += 'img { display: block; } ';
+                html += '</style></head><body><table>';
+                
+                // Header
+                html += '<tr><th width="144">Thumbnail</th><th width="80">ID</th><th width="200">Title</th>';
+                html += '<th width="80">Status</th><th width="80">Severity</th><th width="120">Assigned</th>';
+                html += '<th width="200">Comments</th><th width="120">Comments By</th>';
+                html += '<th width="60">X</th><th width="60">Y</th><th width="60">Z</th><th width="150">Viewable</th></tr>';
+                
+                // Rows - limit image size for Excel compatibility
+                issuesData.forEach(issue => {
+                    html += '<tr height="108">';
+                    html += '<td align="center" style="padding:2px;">';
+                    
+                    if (issue.thumbnail && issue.thumbnail.length > 0) {
+                        // For Excel compatibility, we keep the image but Excel may still have issues
+                        html += '<img src="' + issue.thumbnail + '" width="192" height="144"/>';
+                    } else {
+                        html += 'No Image';
+                    }
+                    
+                    html += '</td>';
+                    html += '<td align="center"><b>' + (issue.display_id || '') + '</b></td>';
+                    html += '<td>' + (issue.title || '') + '</td>';
+                    html += '<td align="center">' + (issue.status || '') + '</td>';
+                    html += '<td align="center">' + (issue.severity || '') + '</td>';
+                    html += '<td>' + (issue.assigned_to || '') + '</td>';
+                    html += '<td>' + (issue.comment_1 || '') + '</td>';
+                    html += '<td>' + (issue.comment_1_by || '') + '</td>';
+                    html += '<td align="right">' + (issue.pin_x || '') + '</td>';
+                    html += '<td align="right">' + (issue.pin_y || '') + '</td>';
+                    html += '<td align="right">' + (issue.pin_z || '') + '</td>';
+                    html += '<td>' + (issue.viewable_name || '') + '</td>';
+                    html += '</tr>';
+                });
+                
+                html += '</table>';
+                html += '<p style="margin-top:10px;"><b>Note:</b> Large images may not display correctly in Excel. ';
+                html += 'If images show "cannot be displayed", try:</p>';
+                html += '<ul><li>Opening file in Excel and enabling editing</li>';
+                html += '<li>Using Excel Online (better base64 support)</li>';
+                html += '<li>Viewing the online table instead</li></ul>';
+                html += '</body></html>';
+                
+                const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'Issues_With_Images_' + new Date().toISOString().split('T')[0] + '.xls';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ Exported!\\n\\n⚠️ Note: Excel has limitations with large embedded images.\\nIf images don\\'t show, click Enable Editing in Excel.');
+            } catch (e) {
+                console.error('Export error:', e);
+                alert('Export failed: ' + e.message);
+            }
+        }
+        
+      // ========== OPEN IN EXTERNAL BROWSER ==========
+        function openInBrowser() {
+            // Get the current URL
+            const currentUrl = window.location.href;
+            
+            console.log('🌐 Opening in external browser:', currentUrl);
+            
+            // Create a temporary link to open in new window
+            const link = document.createElement('a');
+            link.href = currentUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            
+            // Try to click it
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Show confirmation
+            alert('✅ Opening in external browser...\\n\\nExport buttons will be available there!');
+        }
+
+
+
+        // Export to CSV (no images, but all data - opens perfectly in Excel)
+        function exportToCSV() {
+            try {
+                let csv = 'Issue ID,Title,Status,Severity,Assigned To,Comments,Comments By,Pin X,Pin Y,Pin Z,Viewable Name\\n';
+                
+                issuesData.forEach(issue => {
+                    csv += [
+                        issue.display_id || '',
+                        '"' + (issue.title || '').replace(/"/g, '""') + '"',
+                        issue.status || '',
+                        issue.severity || '',
+                        issue.assigned_to || '',
+                        '"' + (issue.comment_1 || '').replace(/"/g, '""') + '"',
+                        issue.comment_1_by || '',
+                        issue.pin_x || '',
+                        issue.pin_y || '',
+                        issue.pin_z || '',
+                        issue.viewable_name || ''
+                    ].join(',') + '\\n';
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'Issues_' + new Date().toISOString().split('T')[0] + '.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ CSV exported with ' + issuesData.length + ' issues!\\n\\nNo images included, but opens perfectly in Excel.');
+                
+            } catch (e) {
+                alert('CSV export failed: ' + e.message);
+            }
+        }
+            
+
+            
         // ========== INITIALIZE ON LOAD ==========
         window.addEventListener('load', function() {
             logDebug('Page loaded');
@@ -1042,6 +1326,49 @@ def thumbnail_table():
     </script>
 </body>
 </html>
+
+
+        
+        // ========== ROW CLICK HANDLER ==========
+        function handleRowClick(idx) {
+            const issue = issuesData[idx];
+            if (!issue) {
+                console.log('Issue not found at index:', idx);
+                return;
+            }
+            console.log('🔵 Row clicked:', issue.display_id);
+            logDebug('Clicked: ' + issue.display_id);
+            sendMessageToViewer(issue);
+        }
+        
+        function sendMessageToViewer(issue) {
+            console.log('🔵 CLICK DETECTED:', issue.display_id);
+            console.log('   Viewable GUID:', issue.viewable_guid);
+            logDebug('Sending message...');
+            
+            const message = {
+                type: 'LOAD_MODEL_AND_NAVIGATE',
+                issue_id: issue.issue_id,
+                display_id: issue.display_id,
+                pin_x: issue.pin_x,
+                pin_y: issue.pin_y,
+                pin_z: issue.pin_z,
+                title: issue.title,
+                viewable_name: issue.viewable_name,
+                viewable_guid: issue.viewable_guid,
+                timestamp: Date.now()
+            };
+            
+            console.log('📤 Sending message:', message);
+            
+            try {
+                parent.postMessage(message, '*');
+                console.log('✅ Sent to parent');
+            } catch(e) {
+                console.error('❌ Failed:', e);
+            }
+        }
+
 """
         
         return html
@@ -1081,7 +1408,7 @@ def powerbi_wrapper():
             flex: 1;
             border: none;
             width: 100%;
-            border-top: 3px solid #667eea;
+            border-top: 5px solid #004E43;
         }
         #status {
             position: fixed;
@@ -1334,6 +1661,159 @@ def refresh():
     token_cache['token'] = None
     token_cache['expires_at'] = 0
     return jsonify({'success': True, 'message': 'Cache cleared'})
+
+
+@app.route('/api/thumbnail/<int:issue_index>')
+def get_thumbnail(issue_index):
+    """Serve individual thumbnails as images"""
+    try:
+        if not issues_cache['data']:
+            return jsonify({'error': 'No issues loaded'}), 404
+        
+        if issue_index >= len(issues_cache['data']):
+            return jsonify({'error': 'Issue not found'}), 404
+        
+        issue = issues_cache['data'][issue_index]
+        thumbnail = issue.get('thumbnail_base64', '')
+        
+        if not thumbnail:
+            return jsonify({'error': 'No thumbnail'}), 404
+        
+        # Extract base64 data (remove data:image/png;base64, prefix)
+        if 'base64,' in thumbnail:
+            thumbnail = thumbnail.split('base64,')[1]
+        
+        # Decode base64
+        import base64
+        image_data = base64.b64decode(thumbnail)
+        
+        from flask import Response
+        return Response(image_data, mimetype='image/png')
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/export-excel-with-images')
+def export_excel_with_images():
+    """Create real Excel file with embedded images using openpyxl"""
+    try:
+        # You'll need: pip install openpyxl pillow
+        from openpyxl import Workbook
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.utils import get_column_letter
+        from io import BytesIO
+        import base64
+        from PIL import Image as PILImage
+        
+        if not issues_cache['data']:
+            return jsonify({'error': 'No issues loaded'}), 404
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Issues"
+        
+        # Headers
+        headers = ['Thumbnail', 'Issue ID', 'Title', 'Status', 'Severity', 'Assigned To', 
+                   'Comments', 'Comments By', 'Pin X', 'Pin Y', 'Pin Z', 'Viewable']
+        ws.append(headers)
+        
+        # Style header
+        for col in range(1, len(headers) + 1):
+            cell = ws.cell(1, col)
+            cell.font = cell.font.copy(bold=True)
+            cell.fill = cell.fill.copy(fgColor="004E43")
+        
+        # Set column widths
+        ws.column_dimensions['A'].width = 26  # Thumbnail column
+        ws.column_dimensions['B'].width = 10
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 12
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 20
+        ws.column_dimensions['G'].width = 30
+        ws.column_dimensions['H'].width = 20
+        ws.column_dimensions['I'].width = 10
+        ws.column_dimensions['J'].width = 10
+        ws.column_dimensions['K'].width = 10
+        ws.column_dimensions['L'].width = 25
+        
+        # Add data
+        issues_with_coords = [i for i in issues_cache['data'] 
+                             if i.get('pin_x') and i.get('pin_y') and i.get('pin_z')]
+        
+        for idx, issue in enumerate(issues_with_coords, start=2):
+            # Set row height for images
+            ws.row_dimensions[idx].height = 108  # 1.5 inches
+            
+            # Add text data (skip thumbnail column)
+            ws.cell(idx, 2, issue.get('display_id', ''))
+            ws.cell(idx, 3, issue.get('title', ''))
+            ws.cell(idx, 4, issue.get('status', ''))
+            ws.cell(idx, 5, issue.get('severity', ''))
+            ws.cell(idx, 6, issue.get('assigned_to', ''))
+            ws.cell(idx, 7, issue.get('comment_1', ''))
+            ws.cell(idx, 8, issue.get('comment_1_by', ''))
+            ws.cell(idx, 9, issue.get('pin_x', ''))
+            ws.cell(idx, 10, issue.get('pin_y', ''))
+            ws.cell(idx, 11, issue.get('pin_z', ''))
+            ws.cell(idx, 12, issue.get('viewable_name', ''))
+            
+            # Add thumbnail image
+            thumbnail_base64 = issue.get('thumbnail_base64', '')
+            if thumbnail_base64 and len(thumbnail_base64) > 0:
+                try:
+                    # Remove data URI prefix if present
+                    if 'base64,' in thumbnail_base64:
+                        thumbnail_base64 = thumbnail_base64.split('base64,')[1]
+                    
+                    # Decode base64
+                    img_data = base64.b64decode(thumbnail_base64)
+                    img_stream = BytesIO(img_data)
+                    
+                    # Resize image if too large
+                    pil_img = PILImage.open(img_stream)
+                    pil_img.thumbnail((192, 144), PILImage.Resampling.LANCZOS)
+                    
+                    # Save to new stream
+                    output_stream = BytesIO()
+                    pil_img.save(output_stream, format='PNG')
+                    output_stream.seek(0)
+                    
+                    # Add to Excel
+                    xl_img = XLImage(output_stream)
+                    xl_img.width = 192  # 2 inches at 96 DPI
+                    xl_img.height = 144  # 1.5 inches
+                    
+                    # Anchor to cell A{idx}
+                    ws.add_image(xl_img, f'A{idx}')
+                    
+                except Exception as e:
+                    print(f"Error adding image for issue {idx}: {e}")
+                    ws.cell(idx, 1, "Image Error")
+        
+        # Save to BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Return as download
+        from flask import send_file
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'Issues_Export_{time.strftime("%Y%m%d")}.xlsx'
+        )
+        
+    except ImportError:
+        return jsonify({
+            'error': 'Required libraries not installed',
+            'message': 'Run: pip install openpyxl pillow'
+        }), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
