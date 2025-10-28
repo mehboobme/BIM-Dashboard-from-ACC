@@ -1395,20 +1395,55 @@ def powerbi_wrapper():
             font-family: 'Segoe UI', sans-serif;
         }
         #container {
-            display: flex;
-            flex-direction: column;
+            position: relative;
             height: 100vh;
+            width: 100%;
+            overflow: hidden;
         }
         #viewer-frame {
-            flex: 1;
-            border: none;
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
+            height: calc(50vh - 4px);  /* 50% minus half of divider */
+            border: none;
+        }
+        #divider {
+            position: absolute;
+            top: calc(50vh - 4px);  /* Centered vertically */
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background: #004E43;
+            cursor: row-resize;
+            transition: background 0.2s;
+            z-index: 1000;
+        }
+        #divider:hover {
+            background: #006655;
+        }
+        #divider::before {
+            content: '⋯';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            pointer-events: none;
+        }
+        #divider.dragging {
+            background: #00a896;
         }
         #table-frame {
-            flex: 1;
-            border: none;
+            position: absolute;
+            top: calc(50vh + 4px);  /* Below divider */
+            left: 0;
             width: 100%;
-            border-top: 5px solid #004E43;
+            height: calc(50vh - 4px);
+            border: none;
         }
         #status {
             position: fixed;
@@ -1558,6 +1593,7 @@ def powerbi_wrapper():
     <div id="status">Connecting...</div>
     <div id="container">
         <iframe id="viewer-frame" src="http://localhost:5000"></iframe>
+        <div id="divider"></div>
         <iframe id="table-frame" src="http://localhost:5000/thumbnail-table.html"></iframe>
     </div>
     
@@ -1611,7 +1647,94 @@ def powerbi_wrapper():
             console.log('✅ Table loaded');
             if (viewerLoaded) showStatus('✅ Ready!');
         };
+
+       // ========== ABSOLUTE POSITIONED RESIZABLE DIVIDER ==========
+        const divider = document.getElementById('divider');
+        const viewerFrame = document.getElementById('viewer-frame');
+        const tableFrame = document.getElementById('table-frame');
+        const container = document.getElementById('container');
         
+        let isDragging = false;
+        
+        divider.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            
+            const startY = e.clientY;
+            const startTop = divider.offsetTop;
+            
+            divider.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+            
+            // Disable iframes during drag
+            viewerFrame.style.pointerEvents = 'none';
+            tableFrame.style.pointerEvents = 'none';
+            
+            function onMouseMove(moveEvent) {
+                if (!isDragging) return;
+                
+                const deltaY = moveEvent.clientY - startY;
+                const newTop = startTop + deltaY;
+                const containerHeight = container.offsetHeight;
+                const minTop = containerHeight * 0.2;
+                const maxTop = containerHeight * 0.8;
+                
+                if (newTop >= minTop && newTop <= maxTop) {
+                    // Update divider position
+                    divider.style.top = newTop + 'px';
+                    
+                    // Update viewer height (above divider)
+                    viewerFrame.style.height = (newTop - 0) + 'px';
+                    
+                    // Update table position and height (below divider)
+                    tableFrame.style.top = (newTop + 8) + 'px';
+                    tableFrame.style.height = (containerHeight - newTop - 8) + 'px';
+                }
+                
+                moveEvent.preventDefault();
+                moveEvent.stopPropagation();
+            }
+            
+            function onMouseUp() {
+                if (!isDragging) return;
+                
+                isDragging = false;
+                divider.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                
+                // Re-enable iframes
+                viewerFrame.style.pointerEvents = 'auto';
+                tableFrame.style.pointerEvents = 'auto';
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        // Double-click to reset
+        divider.addEventListener('dblclick', (e) => {
+            const containerHeight = container.offsetHeight;
+            const resetTop = containerHeight / 2 - 4;
+            
+            divider.style.top = resetTop + 'px';
+            viewerFrame.style.height = resetTop + 'px';
+            tableFrame.style.top = (resetTop + 8) + 'px';
+            tableFrame.style.height = (containerHeight - resetTop - 8) + 'px';
+            
+            showStatus('Reset to 50/50');
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        console.log('🔒 Absolute positioning - cannot auto-resize');
+
     </script>
 </body>
 </html>
