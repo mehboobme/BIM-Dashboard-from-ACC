@@ -11,6 +11,7 @@ import base64
 import time
 from dotenv import load_dotenv
 import json
+import requests
 
 load_dotenv()
 
@@ -220,7 +221,7 @@ def api_issues():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
+    
 
 @app.route('/api/issues/stats')
 def api_stats():
@@ -244,6 +245,8 @@ def get_model_urn_for_viewable():
     """Get the model URN for a specific viewable_guid"""
     try:
         viewable_guid = request.args.get('viewable_guid')
+        print(f"\n{'='*60}")
+        print(f"🔍 DEBUG: Getting model name for viewable: {viewable_guid}")
         
         if not viewable_guid:
             return jsonify({'error': 'viewable_guid required'}), 400
@@ -259,24 +262,127 @@ def get_model_urn_for_viewable():
             print(f"   ❌ No URN found for viewable: {viewable_guid}")
             return jsonify({'error': 'URN not found for this viewable'}), 404
         
-        # Get viewable name
+        print(f"   ✅ Found URN: {model_urn[:50]}...")
+        
+        # Initialize name
         viewable_name = 'Model'
+        
+        # METHOD 1: Try to get from Forge manifest
+        print("\n   📄 METHOD 1: Checking Forge manifest...")
+        try:
+            token = get_access_token()
+            urn_encoded = base64.urlsafe_b64encode(model_urn.encode('utf-8')).decode('utf-8').rstrip('=')
+            manifest_url = f'https://developer.api.autodesk.com/modelderivative/v2/designdata/{urn_encoded}/manifest'
+            
+            headers = {'Authorization': f'Bearer {token}'}
+            manifest_resp = requests.get(manifest_url, headers=headers)
+            
+            print(f"   📡 Manifest API status: {manifest_resp.status_code}")
+            
+            if manifest_resp.ok:
+                manifest_data = manifest_resp.json()
+                print(f"   📦 Manifest root name: {manifest_data.get('name', 'N/A')}")
+                
+                # Look for the viewable with matching GUID
+                derivatives = manifest_data.get('derivatives', [])
+                print(f"   📚 Found {len(derivatives)} derivatives")
+                
+                for idx, derivative in enumerate(derivatives):
+                    print(f"\n   📁 Derivative {idx}:")
+                    print(f"      - name: {derivative.get('name', 'N/A')}")
+                    print(f"      - outputType: {derivative.get('outputType', 'N/A')}")
+                    
+                    children = derivative.get('children', [])
+                    print(f"      - children count: {len(children)}")
+                    
+                    for child_idx, child in enumerate(children):
+                        child_guid = child.get('guid', 'N/A')
+                        child_name = child.get('name', 'N/A')
+                        child_role = child.get('role', 'N/A')
+                        
+                        print(f"         Child {child_idx}: guid={child_guid}, name={child_name}, role={child_role}")
+                        
+                        if child_guid == viewable_guid:
+                            print(f"         🎯 MATCHED viewable GUID!")
+                            print(f"         📝 Available names:")
+                            print(f"            - child.name: {child.get('name', 'N/A')}")
+                            print(f"            - child.role: {child.get('role', 'N/A')}")
+                            print(f"            - derivative.name: {derivative.get('name', 'N/A')}")
+                            print(f"            - manifest.name: {manifest_data.get('name', 'N/A')}")
+                            
+                            # Try all possible name sources
+                            # Get child name, but skip if it's the placeholder
+                            child_name = child.get('name')
+                            if child_name in ['{3D}', '3D', None]:
+                                child_name = None  # Force to try next option
+
+                            # Try all possible name sources, skipping placeholders
+                            viewable_name = (
+                                child_name or 
+                                derivative.get('name') or  # This has "rstadvancedsampleproject.rvt"!
+                                child.get('role') or 
+                                manifest_data.get('name') or
+                                'Model'
+                            )
+                            
+                            print(f"         ✅ Selected name: {viewable_name}")
+                            break
+                    
+                    if viewable_name != 'Model':
+                        break
+                
+                print(f"\n   📝 Name after manifest check: {viewable_name}")
+                
+        except Exception as e:
+            print(f"   ⚠️ Manifest fetch error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # METHOD 2: Update issues cache with correct name
+        print(f"\n   📋 METHOD 2: Updating issues cache...")
         if issues_cache['data']:
-            for issue in issues_cache['data']:
-                if issue.get('viewable_guid') == viewable_guid:
-                    viewable_name = issue.get('viewable_name', 'Model')
-                    if viewable_name == '{3D}':
-                        viewable_name = 'Snowdon Structure'
-                    if '.' in viewable_name:
-                        viewable_name = viewable_name.rsplit('.', 1)[0]
-                    break
+            print(f"   📊 Issues cache has {len(issues_cache['data'])} issues")
+            
+            # If we found a good name from manifest, update the cache
+            if viewable_name not in ['Model', '{3D}', '3D']:
+                print(f"   🔄 We have a good name from manifest: {viewable_name}")
+                for idx, issue in enumerate(issues_cache['data']):
+                    issue_guid = issue.get('viewable_guid')
+                    if issue_guid == viewable_guid:
+                        old_name = issue.get('viewable_name')
+                        print(f"   🎯 Found matching issue {idx}:")
+                        print(f"      - Old viewable_name: {old_name}")
+                        print(f"      - New viewable_name: {viewable_name}")
+                        
+                        # UPDATE the cache with correct name
+                        issue['viewable_name'] = viewable_name
+                        print(f"      ✅ Updated issues cache!")
+                        break
+            else:
+                print(f"   ⚠️ No good name found, keeping cache as-is")
+        else:
+            print(f"   ⚠️ Issues cache is empty!")
+        
+        # Clean up name
+        print(f"\n   🧹 Cleaning up name...")
+        print(f"      Before cleanup: {viewable_name}")
+        
+        if viewable_name in ['{3D}', '3D']:
+            print(f"      ⚠️ Name is still '{viewable_name}' - using fallback")
+            viewable_name = 'Model'
+        
+        if '.' in viewable_name:
+            old_name = viewable_name
+            viewable_name = viewable_name.rsplit('.', 1)[0]
+            print(f"      Removed extension: {old_name} → {viewable_name}")
         
         # Encode URN
         urn_encoded = base64.urlsafe_b64encode(
             model_urn.encode('utf-8')
         ).decode('utf-8').rstrip('=')
         
-        print(f"   ✅ Returning URN for {viewable_name}")
+        print(f"\n   ✅ FINAL NAME: {viewable_name}")
+        print(f"{'='*60}\n")
         
         return jsonify({
             'urn': urn_encoded,
@@ -1443,6 +1549,7 @@ def powerbi_wrapper():
             left: 0;
             width: 100%;
             height: calc(50vh - 4px);
+            border-radius: 4px;
             border: none;
         }
         #status {
