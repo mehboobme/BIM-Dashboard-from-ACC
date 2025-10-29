@@ -95,15 +95,17 @@
       height: 25px;       /* Changed from 1.5cm */
       border: none;
       border-radius: 50px; /* Changed from 50% for rounded square */
-      background: #3498db;
+      background: #004E43;
       color: white;
       font-size: 12px;    /* Adjusted size */
       cursor: pointer;
       box-shadow: 0 4px 10px rgba(0,0,0,0.2);
       transition: background 0.3s;
-      display: flex;
-      align-items: center;
+      display: flex !important;
+      align-items: center !important;
       justify-content: center;
+      padding: 0;
+      line-height: 1;
     }
 
     .dropdown-button:hover {
@@ -462,6 +464,7 @@
         
         if (issuesWithCoords.length > 0) {
           createPushpins(issuesWithCoords);
+          addPushpinListeners();  // ← ADD THIS LINE
           updateStatus(`✅ Loaded ${issuesWithCoords.length} pushpins`, 'success');
           setTimeout(() => document.getElementById('status').style.display = 'none', 3000);
         }
@@ -507,19 +510,32 @@
         function updatePushpinPosition() {
           if (!viewer || !viewer.impl) return;
           
-          const screenPoint = viewer.worldToClient(position);
+          const pos = new THREE.Vector3(issue.pin_x, issue.pin_y, issue.pin_z);
+          const screenPoint = viewer.worldToClient(pos);
           
-          if (screenPoint) {
+          if (!screenPoint) {
+            pushpinDiv.style.display = 'none';
+            return;
+          }
+          
+          // Check if behind camera
+          const camera = viewer.navigation.getCamera();
+          const camDir = new THREE.Vector3();
+          camera.getWorldDirection(camDir);
+          const toPushpin = pos.clone().sub(camera.position);
+          const dotProduct = toPushpin.dot(camDir);
+          
+          // Only show if in front of camera (dot product > 0)
+          if (dotProduct > 0 && pushpinsVisible) {
             pushpinDiv.style.left = (screenPoint.x - 15) + 'px';
             pushpinDiv.style.top = (screenPoint.y - 15) + 'px';
-            pushpinDiv.style.display = pushpinsVisible ? 'flex' : 'none';
+            pushpinDiv.style.display = 'flex';
+          } else {
+            pushpinDiv.style.display = 'none';
           }
         }
-        
-        // Update on camera change
-        viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, updatePushpinPosition);
-        viewer.addEventListener(Autodesk.Viewing.VIEWER_RESIZE_EVENT, updatePushpinPosition);
-        
+
+              
         // Initial position
         updatePushpinPosition();
         
@@ -534,6 +550,27 @@
       
       console.log(`Created ${pushpins.length} pushpins`);
     }
+
+    function updateAllPushpins() {
+    if (!viewer || !viewer.impl || !pushpins || pushpins.length === 0) return;
+    
+    pushpins.forEach(pushpin => {
+      if (pushpin.updatePosition) {
+        pushpin.updatePosition();
+      }
+    });
+  }
+
+    // Add camera event listeners (call this after viewer is initialized)
+    function addPushpinListeners() {
+      if (!viewer) return;
+      
+      viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, updateAllPushpins);
+      viewer.addEventListener(Autodesk.Viewing.VIEWER_RESIZE_EVENT, updateAllPushpins);
+      
+      console.log('✅ Pushpin camera listeners added');
+    }
+
 
     function clearPushpins() {
       pushpins.forEach(pin => {
@@ -562,18 +599,40 @@
       showIssueDetails(issue);
     }
 
-    function focusOnPosition(position) {
-      if (!viewer) return;
-      
-      // Better zoom: closer and smoother
-      const distance = 30; // Changed from 50 - gets closer to the pushpin
-      const camera = viewer.navigation.getCamera();
-      const direction = camera.position.clone().sub(position).normalize();
-      const newPos = position.clone().add(direction.multiplyScalar(distance));
-      
-      viewer.navigation.setView(newPos, position);
-      viewer.navigation.setVerticalFov(40, true); // Add zoom effect
-    }
+  function focusOnPosition(position) {
+  if (!viewer) return;
+  
+  console.log('📍 Focusing on:', position);
+  
+  // Get model bounding box center as reference
+  const bbox = viewer.model.getBoundingBox();
+  const modelCenter = bbox.center();
+  
+  // Calculate offset from model center to issue
+  const offset = position.clone().sub(modelCenter);
+  
+  const distance = 50; // View distance
+  
+  // Position camera on the OPPOSITE side of the model from the issue
+  // This ensures we're looking AT the issue from outside the model
+  const cameraOffset = offset.clone().normalize().multiplyScalar(distance);
+  const cameraPos = position.clone().add(cameraOffset);
+  
+  console.log('  🎥 Camera at:', cameraPos);
+  console.log('  👁️ Looking at:', position);
+  
+  // Set view looking directly at the issue
+  viewer.navigation.setView(cameraPos, position);
+  
+  // Zoom to fit the area around the issue
+  setTimeout(() => {
+    const sphereSize = 15; // Area to focus on
+    viewer.navigation.fitBounds(false, new THREE.Box3(
+      new THREE.Vector3(position.x - sphereSize, position.y - sphereSize, position.z - sphereSize),
+      new THREE.Vector3(position.x + sphereSize, position.y + sphereSize, position.z + sphereSize)
+    ));
+  }, 100);
+}
 
     function showIssueDetails(issue) {
       let info = `<strong>${issue.title || 'Issue'}</strong><br>`;

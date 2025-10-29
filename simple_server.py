@@ -419,11 +419,12 @@ def thumbnail_table():
 <head>
     <meta charset="UTF-8">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
         body { 
             font-family: 'Segoe UI', sans-serif;
             background: #f5f5f5;
-            padding: 2px;
+            border-radius: 4px;
+            padding: 1px;
         }
         .thumbnail-table { 
             width: 100%; 
@@ -439,18 +440,29 @@ def thumbnail_table():
         }
         .thumbnail-table th {
             padding: 1px 1px;
-            text-align: center;
-            font-size: 12px;
-            font-weight: 600;
+            text-align: center;        /* Already centered - good! */
+            font-size: 11px;
+            font-weight: 400;
+            position: sticky;
             top: 0;
-            background: #004E43;;
+            background: #004E43;
             z-index: 100;
+            vertical-align: middle;    /* Add this */
         }
         .thumbnail-table td {
             padding: 10px;
             border-bottom: 1px solid #e0e0e0;
             font-size: 11px;
+            text-align: center;        /* Center all cells */
+            vertical-align: middle;
         }
+
+        /* Keep comments column left-aligned */
+        .thumbnail-table td:nth-child(7),
+        .thumbnail-table th:nth-child(7) {
+            text-align: left;
+        }        
+    
         .thumbnail-img {
             width: 70px;
             height: 52px;
@@ -458,7 +470,7 @@ def thumbnail_table():
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s;
-            border: 2px solid #ddd;
+            border: 1px solid #ddd;
         }
         .thumbnail-img:hover {
             transform: scale(1.1);
@@ -628,11 +640,11 @@ def thumbnail_table():
         top: 100%;
         left: 0;
         background: white;
-        border: 2px solid #667eea;
+        border: 1px solid #004E43;
         border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         z-index: 1000;
-        min-width: 200px;
+        min-width: 100px;
         max-height: 300px;
         overflow-y: auto;
         display: none;
@@ -654,17 +666,17 @@ def thumbnail_table():
     }
 
     .filter-options {
-        max-height: 200px;
+        max-height: 150px;
         overflow-y: auto;
     }
 
     .filter-option {
         padding: 8px 12px;
         cursor: pointer;
-        font-size: 12px;
+        font-size: 11px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         color: #333;  /* ← Dark text */
     }
 
@@ -686,7 +698,7 @@ def thumbnail_table():
 </head>
 <body>
 
-<div style="padding: 10px; background: white; margin-bottom: 10px; border-radius: 4px;">
+<div style="padding: 10px; background: white; margin-bottom: 10px; margin-top: -5px !important; border-radius: 4px;">
     <!-- Open in Browser link - shown in Power BI -->
     <div id="powerbi-buttons" style="display: none;">
         <a href="http://localhost:5000/thumbnail-table.html" target="_blank" style="
@@ -694,11 +706,11 @@ def thumbnail_table():
             background: #004E43;
             color: white;
             border: none;
-            padding: 5px 5px;
+            padding: 5px 6px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
+            font-size: 11px;
+            font-weight: 400;
             text-decoration: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         ">🌐 Open in Browser</a>
@@ -714,22 +726,22 @@ def thumbnail_table():
             background: #004E43;
             color: white;
             border: none;
-            padding: 5px 5px;
+            padding: 25px 20px !important;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 400;
         ">📄 Export CSV (no images)</button>
         
         <button onclick="exportRealExcel()" style="
             background: #27ae60;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 25px 20px !important;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 400;
         ">📊 Export Real Excel (with images)</button>
     </div>
 </div>
@@ -1431,52 +1443,8 @@ def thumbnail_table():
         });
     </script>
 </body>
-</html>
-
-
-        
-        // ========== ROW CLICK HANDLER ==========
-        function handleRowClick(idx) {
-            const issue = issuesData[idx];
-            if (!issue) {
-                console.log('Issue not found at index:', idx);
-                return;
-            }
-            console.log('🔵 Row clicked:', issue.display_id);
-            logDebug('Clicked: ' + issue.display_id);
-            sendMessageToViewer(issue);
-        }
-        
-        function sendMessageToViewer(issue) {
-            console.log('🔵 CLICK DETECTED:', issue.display_id);
-            console.log('   Viewable GUID:', issue.viewable_guid);
-            logDebug('Sending message...');
-            
-            const message = {
-                type: 'LOAD_MODEL_AND_NAVIGATE',
-                issue_id: issue.issue_id,
-                display_id: issue.display_id,
-                pin_x: issue.pin_x,
-                pin_y: issue.pin_y,
-                pin_z: issue.pin_z,
-                title: issue.title,
-                viewable_name: issue.viewable_name,
-                viewable_guid: issue.viewable_guid,
-                timestamp: Date.now()
-            };
-            
-            console.log('📤 Sending message:', message);
-            
-            try {
-                parent.postMessage(message, '*');
-                console.log('✅ Sent to parent');
-            } catch(e) {
-                console.error('❌ Failed:', e);
-            }
-        }
-
-"""
-        
+</html>"""
+      
         return html
         
     except Exception as e:
@@ -1519,7 +1487,8 @@ def powerbi_wrapper():
             top: calc(50vh - 4px);  /* Centered vertically */
             left: 0;
             width: 100%;
-            height: 8px;
+            height: 6px;
+            border-radius: 4px;
             background: #004E43;
             cursor: row-resize;
             transition: background 0.2s;
