@@ -713,9 +713,9 @@ def thumbnail_table():
             font-weight: 400;
             text-decoration: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        ">🌐 Open in Browser</a>
+        ">🌐 http://localhost:5000/thumbnail-table.html</a>
         <span style="font-size: 12px; color: #666; margin-left: 2px;margin-top: 2px; margin-bottom: 2px; display: inline-block;">
-            Click to open in external browser for export functionality
+            copy & paste this url in browser to get excel export
         </span>
     </div>
     
@@ -726,7 +726,7 @@ def thumbnail_table():
             background: #004E43;
             color: white;
             border: none;
-            padding: 25px 20px !important;
+            padding: 10px 15px !important;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
@@ -737,7 +737,7 @@ def thumbnail_table():
             background: #27ae60;
             color: white;
             border: none;
-            padding: 25px 20px !important;
+            padding: 10px 15px !important;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
