@@ -604,34 +604,107 @@
   
   console.log('📍 Focusing on:', position);
   
-  // Get model bounding box center as reference
+  // Get model bounding box for reference
   const bbox = viewer.model.getBoundingBox();
-  const modelCenter = bbox.center();
+  const modelCenter = bbox.getCenter(new THREE.Vector3());
+  const modelSize = bbox.getSize(new THREE.Vector3()).length();
+  const modelMin = bbox.min;
+  const modelMax = bbox.max;
   
-  // Calculate offset from model center to issue
-  const offset = position.clone().sub(modelCenter);
+  // Calculate height metrics
+  const modelHeight = modelMax.z - modelMin.z;
+  const pushpinHeightFromBottom = position.z - modelMin.z;
+  const heightPercentage = (pushpinHeightFromBottom / modelHeight) * 100;
   
-  const distance = 50; // View distance
+  // Calculate distance from top and bottom
+  const distanceFromTop = modelMax.z - position.z;
+  const distanceFromBottom = position.z - modelMin.z;
   
-  // Position camera on the OPPOSITE side of the model from the issue
-  // This ensures we're looking AT the issue from outside the model
-  const cameraOffset = offset.clone().normalize().multiplyScalar(distance);
-  const cameraPos = position.clone().add(cameraOffset);
+  console.log('  🏗️ Model Z range:', modelMin.z.toFixed(2), 'to', modelMax.z.toFixed(2));
+  console.log('  📏 Pushpin Z:', position.z.toFixed(2));
+  console.log('  📊 Height percentage:', heightPercentage.toFixed(1) + '%');
+  console.log('  ⬆️ Distance from top:', distanceFromTop.toFixed(2));
+  console.log('  ⬇️ Distance from bottom:', distanceFromBottom.toFixed(2));
   
+  // Set base camera distance based on model size
+  const baseDistance = Math.min(modelSize * 0.2, 120);
+  
+  // Calculate horizontal angle
+  const toPushpin = position.clone().sub(modelCenter);
+  const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
+  const offsetAngle = horizontalAngle + Math.PI;
+  
+  let cameraPos;
+  let viewType;
+  let zoomDistance = baseDistance;
+  
+  // SMART DETECTION BASED ON VERTICAL POSITION
+  
+  if (heightPercentage > 85) {
+    // ========== ROOF/TOP (>85%) - VIEW FROM ABOVE-SIDE ==========
+    viewType = '🏠 ROOF/TOP - Viewing from above-side';
+    cameraPos = new THREE.Vector3(
+      position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
+      position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
+      position.z + baseDistance * 0.4  // Elevated above
+    );
+    zoomDistance = baseDistance * 0.8;
+    
+  } else if (heightPercentage > 55 && heightPercentage <= 85) {
+    // ========== CEILING/UNDERSIDE (55-85%) - VIEW FROM BELOW ==========
+    viewType = '⬆️ CEILING/UNDERSIDE - Viewing from below';
+    cameraPos = new THREE.Vector3(
+      position.x + Math.cos(offsetAngle) * baseDistance * 0.5,
+      position.y + Math.sin(offsetAngle) * baseDistance * 0.5,
+      position.z - baseDistance * 0.7  // Below looking up
+    );
+    zoomDistance = baseDistance * 0.9;
+    
+  } else if (heightPercentage > 20 && heightPercentage <= 55) {
+    // ========== MID-FLOORS (20-55%) - VIEW FROM SIDE ==========
+    viewType = '↔️ MID-FLOOR - Viewing from side';
+    cameraPos = new THREE.Vector3(
+      position.x + Math.cos(offsetAngle) * baseDistance * 0.8,
+      position.y + Math.sin(offsetAngle) * baseDistance * 0.8,
+      position.z + baseDistance * 0.2  // Slightly elevated side view
+    );
+    zoomDistance = baseDistance * 0.85;
+    
+  } else {
+    // ========== GROUND/FOUNDATION (≤20%) - VIEW FROM ABOVE-SIDE ==========
+    viewType = '🏗️ GROUND/FOUNDATION - Viewing from above-side';
+    cameraPos = new THREE.Vector3(
+      position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
+      position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
+      position.z + baseDistance * 0.5  // Elevated above
+    );
+    zoomDistance = baseDistance * 0.8;
+  }
+  
+  console.log('  🎯', viewType);
   console.log('  🎥 Camera at:', cameraPos);
   console.log('  👁️ Looking at:', position);
+  console.log('  📏 Distance:', cameraPos.distanceTo(position).toFixed(2));
   
-  // Set view looking directly at the issue
+  // Use Z-up as standard
+  const upVector = new THREE.Vector3(0, 0, 1);
+  
+  // Set the view
   viewer.navigation.setView(cameraPos, position);
+  viewer.navigation.setCameraUpVector(upVector);
   
-  // Zoom to fit the area around the issue
+  // TIGHTER, MORE FOCUSED ZOOM
   setTimeout(() => {
-    const sphereSize = 15; // Area to focus on
-    viewer.navigation.fitBounds(false, new THREE.Box3(
+    // Reduced sphere size for tighter focus
+    const sphereSize = Math.min(modelSize * 0.04, 25);  // Reduced from 0.08 and 40
+    
+    console.log('  🔍 Focus sphere size:', sphereSize.toFixed(2));
+    
+    viewer.navigation.fitBounds(true, new THREE.Box3(
       new THREE.Vector3(position.x - sphereSize, position.y - sphereSize, position.z - sphereSize),
       new THREE.Vector3(position.x + sphereSize, position.y + sphereSize, position.z + sphereSize)
     ));
-  }, 100);
+  }, 400);
 }
 
     function showIssueDetails(issue) {
