@@ -613,72 +613,135 @@
   
   // Calculate height metrics
   const modelHeight = modelMax.z - modelMin.z;
+  const modelWidth = modelMax.x - modelMin.x;
+  const modelDepth = modelMax.y - modelMin.y;
   const pushpinHeightFromBottom = position.z - modelMin.z;
   const heightPercentage = (pushpinHeightFromBottom / modelHeight) * 100;
   
-  // Calculate distance from top and bottom
-  const distanceFromTop = modelMax.z - position.z;
-  const distanceFromBottom = position.z - modelMin.z;
+  // ========== NEW: DETECT IF PUSHPIN IS INSIDE OR OUTSIDE ==========
+  // Calculate distance from edges in each direction
+  const distFromMinX = position.x - modelMin.x;
+  const distFromMaxX = modelMax.x - position.x;
+  const distFromMinY = position.y - modelMin.y;
+  const distFromMaxY = modelMax.y - position.y;
   
-  console.log('  🏗️ Model Z range:', modelMin.z.toFixed(2), 'to', modelMax.z.toFixed(2));
-  console.log('  📏 Pushpin Z:', position.z.toFixed(2));
+  const edgeThreshold = Math.min(modelWidth, modelDepth) * 0.15; // 15% from edge = exterior
+  
+  const nearEdgeX = distFromMinX < edgeThreshold || distFromMaxX < edgeThreshold;
+  const nearEdgeY = distFromMinY < edgeThreshold || distFromMaxY < edgeThreshold;
+  const isExterior = nearEdgeX || nearEdgeY;
+  
+  // Calculate which side of building (for exterior pushpins)
+  let exteriorSide = 'interior';
+  if (isExterior) {
+    const minDist = Math.min(distFromMinX, distFromMaxX, distFromMinY, distFromMaxY);
+    if (minDist === distFromMinX) exteriorSide = '-X (West)';
+    else if (minDist === distFromMaxX) exteriorSide = '+X (East)';
+    else if (minDist === distFromMinY) exteriorSide = '-Y (South)';
+    else if (minDist === distFromMaxY) exteriorSide = '+Y (North)';
+  }
+  
+  console.log('  🏗️ Model bounds:');
+  console.log('    X:', modelMin.x.toFixed(2), 'to', modelMax.x.toFixed(2));
+  console.log('    Y:', modelMin.y.toFixed(2), 'to', modelMax.y.toFixed(2));
+  console.log('    Z:', modelMin.z.toFixed(2), 'to', modelMax.z.toFixed(2));
+  console.log('  📏 Pushpin position:', position.x.toFixed(2), position.y.toFixed(2), position.z.toFixed(2));
   console.log('  📊 Height percentage:', heightPercentage.toFixed(1) + '%');
-  console.log('  ⬆️ Distance from top:', distanceFromTop.toFixed(2));
-  console.log('  ⬇️ Distance from bottom:', distanceFromBottom.toFixed(2));
+  console.log('  🏠 Location type:', isExterior ? 'EXTERIOR' : 'INTERIOR');
+  if (isExterior) {
+    console.log('  🧭 Exterior side:', exteriorSide);
+  }
+  console.log('  📐 Distances from edges:');
+  console.log('    From -X edge:', distFromMinX.toFixed(2));
+  console.log('    From +X edge:', distFromMaxX.toFixed(2));
+  console.log('    From -Y edge:', distFromMinY.toFixed(2));
+  console.log('    From +Y edge:', distFromMaxY.toFixed(2));
   
   // Set base camera distance based on model size
   const baseDistance = Math.min(modelSize * 0.2, 120);
   
-  // Calculate horizontal angle
+  // Calculate vector from model center to pushpin
   const toPushpin = position.clone().sub(modelCenter);
-  const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
-  const offsetAngle = horizontalAngle + Math.PI;
   
   let cameraPos;
   let viewType;
-  let zoomDistance = baseDistance;
   
-  // SMART DETECTION BASED ON VERTICAL POSITION
+  // ========== SMART 3D-AWARE CAMERA POSITIONING ==========
   
-  if (heightPercentage > 85) {
-    // ========== ROOF/TOP (>85%) - VIEW FROM ABOVE-SIDE ==========
-    viewType = '🏠 ROOF/TOP - Viewing from above-side';
-    cameraPos = new THREE.Vector3(
-      position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
-      position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
-      position.z + baseDistance * 0.4  // Elevated above
-    );
-    zoomDistance = baseDistance * 0.8;
+  if (isExterior) {
+    // ========== EXTERIOR PUSHPIN - VIEW FROM OUTSIDE ==========
+    console.log('  🎯 EXTERIOR pushpin detected - positioning camera outside');
     
-  } else if (heightPercentage > 55 && heightPercentage <= 85) {
-    // ========== CEILING/UNDERSIDE (55-85%) - VIEW FROM BELOW ==========
-    viewType = '⬆️ CEILING/UNDERSIDE - Viewing from below';
-    cameraPos = new THREE.Vector3(
-      position.x + Math.cos(offsetAngle) * baseDistance * 0.5,
-      position.y + Math.sin(offsetAngle) * baseDistance * 0.5,
-      position.z - baseDistance * 0.7  // Below looking up
-    );
-    zoomDistance = baseDistance * 0.9;
+    // For exterior pushpins, always position camera OUTSIDE the building
+    // looking inward at the pushpin
     
-  } else if (heightPercentage > 20 && heightPercentage <= 55) {
-    // ========== MID-FLOORS (20-55%) - VIEW FROM SIDE ==========
-    viewType = '↔️ MID-FLOOR - Viewing from side';
+    // Calculate outward direction from center through pushpin
+    const horizontalToPushpin = new THREE.Vector3(toPushpin.x, toPushpin.y, 0).normalize();
+    
+    // Position camera outside, beyond the pushpin
+    const horizontalDist = baseDistance * 0.8;
+    const verticalOffset = toPushpin.z * 0.3; // Match some of the height
+    
     cameraPos = new THREE.Vector3(
-      position.x + Math.cos(offsetAngle) * baseDistance * 0.8,
-      position.y + Math.sin(offsetAngle) * baseDistance * 0.8,
-      position.z + baseDistance * 0.2  // Slightly elevated side view
+      position.x + horizontalToPushpin.x * horizontalDist,
+      position.y + horizontalToPushpin.y * horizontalDist,
+      position.z + verticalOffset + baseDistance * 0.15 // Slightly elevated
     );
-    zoomDistance = baseDistance * 0.85;
+    
+    viewType = '🏢 EXTERIOR - Viewing from outside';
     
   } else {
-    // ========== GROUND/FOUNDATION (≤20%) - VIEW FROM ABOVE-SIDE ==========
-    viewType = '🏗️ GROUND/FOUNDATION - Viewing from above-side';
-    cameraPos = new THREE.Vector3(
-      position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
-      position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
-      position.z + baseDistance * 0.5  // Elevated above
-    );
-    zoomDistance = baseDistance * 0.8;
+    // ========== INTERIOR PUSHPIN - ZONE-BASED VIEW ==========
+    console.log('  🎯 INTERIOR pushpin detected - using zone-based positioning');
+    
+    if (heightPercentage > 85) {
+      // ZONE 1: ROOF/TOP - View from above-side
+      viewType = '🏠 INTERIOR ROOF/TOP - Viewing from above-side';
+      const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
+      const offsetAngle = horizontalAngle + Math.PI;
+      
+      cameraPos = new THREE.Vector3(
+        position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
+        position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
+        position.z + baseDistance * 0.4
+      );
+      
+    } else if (heightPercentage > 55 && heightPercentage <= 85) {
+      // ZONE 2: CEILING/UNDERSIDE - View from below
+      viewType = '⬆️ INTERIOR CEILING/UNDERSIDE - Viewing from below';
+      const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
+      const offsetAngle = horizontalAngle + Math.PI;
+      
+      cameraPos = new THREE.Vector3(
+        position.x + Math.cos(offsetAngle) * baseDistance * 0.5,
+        position.y + Math.sin(offsetAngle) * baseDistance * 0.5,
+        position.z - baseDistance * 0.7
+      );
+      
+    } else if (heightPercentage > 20 && heightPercentage <= 55) {
+      // ZONE 3: MID-FLOORS - View from side
+      viewType = '↔️ INTERIOR MID-FLOOR - Viewing from side';
+      const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
+      const offsetAngle = horizontalAngle + Math.PI;
+      
+      cameraPos = new THREE.Vector3(
+        position.x + Math.cos(offsetAngle) * baseDistance * 0.8,
+        position.y + Math.sin(offsetAngle) * baseDistance * 0.8,
+        position.z + baseDistance * 0.2
+      );
+      
+    } else {
+      // ZONE 4: GROUND/FOUNDATION - View from above-side
+      viewType = '🏗️ INTERIOR GROUND/FOUNDATION - Viewing from above-side';
+      const horizontalAngle = Math.atan2(toPushpin.y, toPushpin.x);
+      const offsetAngle = horizontalAngle + Math.PI;
+      
+      cameraPos = new THREE.Vector3(
+        position.x + Math.cos(offsetAngle) * baseDistance * 0.6,
+        position.y + Math.sin(offsetAngle) * baseDistance * 0.6,
+        position.z + baseDistance * 0.5
+      );
+    }
   }
   
   console.log('  🎯', viewType);
@@ -695,8 +758,7 @@
   
   // TIGHTER, MORE FOCUSED ZOOM
   setTimeout(() => {
-    // Reduced sphere size for tighter focus
-    const sphereSize = Math.min(modelSize * 0.04, 25);  // Reduced from 0.08 and 40
+    const sphereSize = Math.min(modelSize * 0.04, 25);
     
     console.log('  🔍 Focus sphere size:', sphereSize.toFixed(2));
     

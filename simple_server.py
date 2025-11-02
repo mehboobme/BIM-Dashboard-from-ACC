@@ -715,7 +715,7 @@ def thumbnail_table():
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         ">🌐 http://localhost:5000/thumbnail-table.html</a>
         <span style="font-size: 12px; color: #666; margin-left: 2px;margin-top: 2px; margin-bottom: 2px; display: inline-block;">
-            copy & paste this url in browser to get excel export
+            use this url in browser to get excel export
         </span>
     </div>
     
